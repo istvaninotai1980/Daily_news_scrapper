@@ -1,2 +1,2 @@
-# Daily_news_scrapper
+#scrapper
 Hír gyűjtő bot
