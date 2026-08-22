@@ -7,7 +7,7 @@ import yfinance as yf
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# --- CONFIG: RÉSZVÉNYEK (Tickerek) ---
+# --- CONFIG: RÉSZVÉNYEK & ETF-EK ---
 STOCKS = {
     "Amazon (AMZ)": "AMZN",
     "Defence ETF (ARMY)": "ARMY.PA",
@@ -22,7 +22,6 @@ STOCKS = {
     "S&P 500 ETF (VUSA)": "VUSA.L"
 }
 
-# --- CONFIG: RSS FORRÁSOK ---
 FEEDS = {
     "Telex": "https://telex.hu/rss",
     "Index": "https://index.hu/24ora/rss/",
@@ -30,33 +29,63 @@ FEEDS = {
     "Nemzeti Sport": "https://www.nemzetisport.hu/rss"
 }
 
-def get_stock_trends():
-    """Részvények napi, heti és havi teljesítményének lekérése"""
-    html = "<h3>Tőzsdei Portfólió Trendek</h3><table border='1' cellpadding='5' style='border-collapse:collapse; width:100%;'>"
-    html += "<tr style='background-color:#f2f2f2;'><th>Eszköz</th><th>Ár</th><th>Napi %</th><th>Heti %</th><th>Havi %</th></tr>"
+def get_stock_trends_and_news():
+    """Részvények, ETF-ek teljesítménye (Napi, Heti, Havi, YTD) és cégspecifikus hírek"""
+    html = "<h3>Tőzsdei Portfólió Trendek & Hírérték</h3>"
+    html += "<table border='1' cellpadding='5' style='border-collapse:collapse; width:100%;'>"
+    html += "<tr style='background-color:#f2f2f2;'><th>Eszköz</th><th>Ár</th><th>Napi %</th><th>Heti %</th><th>Havi %</th><th>2026 YTD %</th></tr>"
     
+    stock_news_html = "<h4>Friss Tőzsdei / Cégspecifikus Hírek</h4><ul>"
+    has_stock_news = False
+
     for name, ticker_symbol in STOCKS.items():
         try:
             ticker = yf.Ticker(ticker_symbol)
-            hist = ticker.history(period="1mo")
-            if len(hist) > 0:
+            # Lekérjük az adatokat 2026. január 1-től a mai napig
+            hist = ticker.history(start="2026-01-01")
+            
+            if hist.empty or len(hist) < 2:
+                alt_symbol = ticker_symbol.split('.')[0]
+                ticker = yf.Ticker(alt_symbol)
+                hist = ticker.history(start="2026-01-01")
+
+            if not hist.empty and len(hist) >= 2:
                 current_price = hist['Close'].iloc[-1]
-                daily_change = ((current_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100 if len(hist) > 1 else 0
+                daily_change = ((current_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
-                monthly_change = ((current_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100
+                monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
+                ytd_change = ((current_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100
                 
                 def fmt(val):
                     color = "green" if val >= 0 else "red"
                     return f"<span style='color:{color};'>{val:+.2f}%</span>"
 
-                html += f"<tr><td><b>{name}</b></td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td></tr>"
+                html += f"<tr><td><b>{name}</b></td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(ytd_change)}</b></td></tr>"
+            else:
+                html += f"<tr><td><b>{name}</b></td><td colspan='5'><i>Adatfrissítés alatt / Piac zárva</i></td></tr>"
+
+            # Cégspecifikus hírek lekérése a Yahoo Finance-ből
+            news = ticker.news
+            if news:
+                for item in news[:1]:  # Részvényenként a legfrissebb 1 hír
+                    title = item.get('title')
+                    link = item.get('link')
+                    if title and link:
+                        stock_news_html += f"<li>[<b>{name}</b>] <a href='{link}'>{title}</a></li>"
+                        has_stock_news = True
+
         except Exception:
-            html += f"<tr><td><b>{name}</b></td><td colspan='4'>Adat nem elérhető</td></tr>"
+            html += f"<tr><td><b>{name}</b></td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
+
     html += "</table>"
-    return html
+    stock_news_html += "</ul>"
+    
+    if not has_stock_news:
+        stock_news_html = "<p><i>Nincs friss piaci hír az érintett részvényekhez.</i></p>"
+
+    return html + stock_news_html
 
 def get_weather():
-    """Pécs, Baja és Magyarország időjárás előrejelzése"""
     locations = {"Pécs": (46.0727, 18.2323), "Baja": (46.1749, 18.9563)}
     html = "<h3>Időjárás Előrejelzés</h3>"
     
@@ -74,44 +103,45 @@ def get_weather():
     return html
 
 def get_categorized_news():
-    """Hírek gyűjtése témakörök szerint az elmúlt 24 órából"""
-    keywords = {
-        "Belpolitika": ["kormány", "parlament", "orban", "magyarország", "választás", "fidesz", "tisza"],
-        "Külpolitika": ["eu", "usa", "ukrajna", "orosz", "kína", "háború", "unió", "külföld"],
-        "Gazdaság": ["infláció", "hitel", "bank", "ft", "forint", "euró", "költségvetés", "adalom"],
-        "Tudomány & Tech": ["ai", "mesterséges intelligencia", "űrhajó", "nasa", "tech", "kutatás", "tudomány"],
-        "Klíma & Környezet": ["klíma", "melegedés", "környezetvédelem", "aszály", "megújuló", "napelem"],
-        "Sport (Válogatott & Liverpool)": ["válogatott", "szoboszlai", "liverpool", "foci", "eb", "vb", "magyar"]
+    categories = {
+        "Belpolitika": ["kormány", "parlament", "orbán", "választás", "fidesz", "tisza párt", "miniszter"],
+        "Külpolitika": ["ukrajna", "orosz", "usa", "putyin", "zelenszkij", "unió", "brüsszel", "nato"],
+        "Gazdaság": ["infláció", "forint", "euró", "mnb", "költségvetés", "adózás", "hitel", "kamat"],
+        "Tudomány & Tech": ["mesterséges intelligencia", "ai", "nasa", "kutatás", "fejlesztés", "űrkutatás"],
+        "Klíma & Környezet": ["klímaváltozás", "felmelegedés", "aszály", "megújuló", "szén-dioxid"],
+        "Sport (Válogatott & Liverpool)": ["szoboszlai", "liverpool", "magyar válogatott", "foci válogatott", "foci eb", "foci vb"]
     }
     
-    collected_news = {cat: [] for cat in keywords}
+    all_entries = []
     now = datetime.datetime.now(datetime.timezone.utc)
 
     for source, url in FEEDS.items():
         feed = feedparser.parse(url)
         for entry in feed.entries:
-            # Utolsó 24 óra szűrése
             published = entry.get('published_parsed') or entry.get('updated_parsed')
             if published:
                 pub_dt = datetime.datetime(*published[:6], tzinfo=datetime.timezone.utc)
                 if (now - pub_dt).total_seconds() > 86400:
                     continue
+            all_entries.append({"source": source, "title": entry.title, "link": entry.link})
 
-            title = entry.title
-            link = entry.link
-            
-            for cat, kw_list in keywords.items():
-                if len(collected_news[cat]) < 3:
-                    if any(kw in title.lower() for kw in kw_list):
-                        collected_news[cat].append(f"<li>[<b>{source}</b>] <a href='{link}'>{title}</a></li>")
+    html = "<h3>Napi Hírösszefoglaló (Mixelt forrásokból)</h3>"
+    
+    for cat, kw_list in categories.items():
+        matched_items = []
+        for item in all_entries:
+            title_lower = item["title"].lower()
+            if any(kw in title_lower for kw in kw_list):
+                matched_items.append(f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>")
+                if len(matched_items) >= 3:
+                    break
 
-    html = "<h3>Napi Hírösszefoglaló (Top találatok az elmúlt 24 órából)</h3>"
-    for cat, items in collected_news.items():
         html += f"<h4>{cat}</h4>"
-        if items:
-            html += "<ul>" + "".join(items) + "</ul>"
+        if matched_items:
+            html += "<ul>" + "".join(matched_items) + "</ul>"
         else:
-            html += "<p><i>Nincs kiemelt friss hír ebben a témában.</i></p>"
+            html += "<p><i>Nincs kiemelt friss hír ebben a témában az elmúlt 24 órában.</i></p>"
+            
     return html
 
 def send_email(body_content):
@@ -145,7 +175,7 @@ def send_email(body_content):
 
 if __name__ == "__main__":
     weather_data = get_weather()
-    stock_data = get_stock_trends()
+    stock_data = get_stock_trends_and_news()
     news_data = get_categorized_news()
 
     send_email({
@@ -153,4 +183,3 @@ if __name__ == "__main__":
         "stocks": stock_data,
         "news": news_data
     })
-
