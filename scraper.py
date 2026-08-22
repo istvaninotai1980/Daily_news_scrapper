@@ -11,15 +11,15 @@ from email.mime.multipart import MIMEMultipart
 STOCKS = {
     "Amazon (AMZ)": "AMZN",
     "Defence ETF (ARMY)": "ARMY.PA",
-    "Copper ETF (COPG)": "COPG.L",
+    "Copper ETF (COPG)": "COPP.DE",
     "Constellation Software (CSU)": "CSU.TO",
     "Global Growth ETF (GGRW)": "GGRW.L",
-    "Physical Silver (ISLN)": "ISLN.L",
+    "Physical Silver (ISLN)": "ISLN.DE",
     "Microsoft (MSF)": "MSFT",
     "OTP Bank (OTP)": "OTP.BU",
     "S&P 500 Info Tech (QDV5)": "QDV5.DE",
     "TSMC (TSM)": "TSM",
-    "S&P 500 ETF (VUSA)": "VUSA.L"
+    "S&P 500 ETF (VUSA)": "VUSA.DE"
 }
 
 FEEDS = {
@@ -30,60 +30,46 @@ FEEDS = {
 }
 
 def get_stock_trends_and_news():
-    """Részvények, ETF-ek teljesítménye (Napi, Heti, Havi, YTD) és cégspecifikus hírek"""
+    """Részvények és ETF-ek adatlekérése YTD és trend mutatókkal"""
     html = "<h3>Tőzsdei Portfólió Trendek & Hírérték</h3>"
     html += "<table border='1' cellpadding='5' style='border-collapse:collapse; width:100%;'>"
     html += "<tr style='background-color:#f2f2f2;'><th>Eszköz</th><th>Ár</th><th>Napi %</th><th>Heti %</th><th>Havi %</th><th>2026 YTD %</th></tr>"
     
-    stock_news_html = "<h4>Friss Tőzsdei / Cégspecifikus Hírek</h4><ul>"
-    has_stock_news = False
-
     for name, ticker_symbol in STOCKS.items():
         try:
             ticker = yf.Ticker(ticker_symbol)
-            # Adatok lekérése 2026. január 1-től
-            hist = ticker.history(start="2026-01-01")
+            hist = ticker.history(period="max")
             
             if hist.empty or len(hist) < 2:
                 alt_symbol = ticker_symbol.split('.')[0]
                 ticker = yf.Ticker(alt_symbol)
-                hist = ticker.history(start="2026-01-01")
+                hist = ticker.history(period="1y")
 
             if not hist.empty and len(hist) >= 2:
                 current_price = hist['Close'].iloc[-1]
                 daily_change = ((current_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
-                ytd_change = ((current_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100
                 
+                hist_2026 = hist[hist.index >= '2026-01-01']
+                if not hist_2026.empty:
+                    start_price = hist_2026['Close'].iloc[0]
+                    ytd_change = ((current_price - start_price) / start_price) * 100
+                else:
+                    ytd_change = daily_change
+
                 def fmt(val):
                     color = "green" if val >= 0 else "red"
                     return f"<span style='color:{color};'>{val:+.2f}%</span>"
 
                 html += f"<tr><td><b>{name}</b></td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(ytd_change)}</b></td></tr>"
             else:
-                html += f"<tr><td><b>{name}</b></td><td colspan='5'><i>Adatfrissítés alatt / Piac zárva</i></td></tr>"
-
-            # Cégspecifikus hírek lekérése
-            news = ticker.news
-            if news:
-                for item in news[:1]:
-                    title = item.get('title')
-                    link = item.get('link')
-                    if title and link:
-                        stock_news_html += f"<li>[<b>{name}</b>] <a href='{link}'>{title}</a></li>"
-                        has_stock_news = True
-
+                html += f"<tr><td><b>{name}</b></td><td colspan='5'><i>Adatfrissítés alatt</i></td></tr>"
         except Exception:
             html += f"<tr><td><b>{name}</b></td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
-    stock_news_html += "</ul>"
-    
-    if not has_stock_news:
-        stock_news_html = "<p><i>Nincs friss piaci hír az érintett részvényekhez.</i></p>"
-
-    return html + stock_news_html
+    return html
 
 def get_weather():
     locations = {"Pécs": (46.0727, 18.2323), "Baja": (46.1749, 18.9563)}
@@ -104,12 +90,12 @@ def get_weather():
 
 def get_categorized_news():
     categories = {
-        "Belpolitika": ["kormány", "parlament", "orbán", "választás", "fidesz", "tisza párt", "miniszter"],
-        "Külpolitika": ["ukrajna", "orosz", "usa", "putyin", "zelenszkij", "unió", "brüsszel", "nato"],
-        "Gazdaság": ["infláció", "forint", "euró", "mnb", "költségvetés", "adózás", "hitel", "kamat"],
-        "Tudomány & Tech": ["mesterséges intelligencia", "ai", "nasa", "kutatás", "fejlesztés", "űrkutatás"],
-        "Klíma & Környezet": ["klímaváltozás", "felmelegedés", "aszály", "megújuló", "szén-dioxid"],
-        "Sport (Válogatott & Liverpool)": ["szoboszlai", "liverpool", "magyar válogatott", "foci válogatott", "foci eb", "foci vb"]
+        "Belpolitika": ["kormány", "parlament", "orbán", "választás", "fidesz", "tisza", "miniszter", "magyarország"],
+        "Külpolitika": ["eu", "usa", "kína", "unió", "brüsszel", "nato", "németország", "franciaország", "választás", "közel-kelet"],
+        "Gazdaság": ["infláció", "forint", "euró", "mnb", "költségvetés", "adózás", "hitel", "kamat", "bank"],
+        "Tudomány & Tech": ["mesterséges intelligencia", "ai", "nasa", "kutatás", "fejlesztés", "űrkutatás", "szoftver", "chip", "tech"],
+        "Klíma & Környezet": ["klíma", "felmelegedés", "aszály", "megújuló", "szén-dioxid", "környezet", "időjárás", "energia", "zöld"],
+        "Sport (Válogatott & Liverpool)": ["szoboszlai", "liverpool", "válogatott", "foci", "főnix", "eb", "vb", "liga", "bajnokság", "meccs"]
     }
     
     all_entries = []
@@ -125,16 +111,25 @@ def get_categorized_news():
                     continue
             all_entries.append({"source": source, "title": entry.title, "link": entry.link})
 
-    html = "<h3>Napi Hírösszefoglaló (Mixelt forrásokból)</h3>"
+    html = "<h3>Napi Hírösszefoglaló</h3>"
     
     for cat, kw_list in categories.items():
         matched_items = []
         for item in all_entries:
             title_lower = item["title"].lower()
-            if any(kw in title_lower for kw in kw_list):
-                matched_items.append(f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>")
-                if len(matched_items) >= 3:
-                    break
+            
+            if cat == "Sport (Válogatott & Liverpool)":
+                if item["source"] in ["M4 Sport", "Nemzeti Sport"] or any(kw in title_lower for kw in kw_list):
+                    matched_items.append(f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>")
+            else:
+                if any(kw in title_lower for kw in kw_list):
+                    if cat == "Tudomány & Tech" and any(bad in title_lower for bad in ["trump", "bíróság", "politika"]):
+                        continue
+                    matched_items.append(f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>")
+            
+            # Kategóriánkénti limit beállítása 5 találatra
+            if len(matched_items) >= 5:
+                break
 
         html += f"<h4>{cat}</h4>"
         if matched_items:
@@ -183,6 +178,9 @@ if __name__ == "__main__":
         "stocks": stock_data,
         "news": news_data
     })
+
+
+
 
 
 
