@@ -25,41 +25,31 @@ PORTFOLIO = {
 
 EXPECTED_COUNT = 11
 
-# --- CONFIG: ROVAT-SPECIFIKUS RSS FORRÁSOK ---
-CATEGORY_FEEDS = {
-    "Belpolitika": [
-        "https://telex.hu/rss/rovat/belfold",
-        "https://index.hu/24ora/rss/?feed=belfold"
-    ],
-    "Külpolitika": [
-        "https://telex.hu/rss/rovat/kulfold",
-        "https://index.hu/24ora/rss/?feed=kulfold"
-    ],
-    "Gazdaság": [
-        "https://telex.hu/rss/rovat/gazdasag",
-        "https://index.hu/24ora/rss/?feed=gazdasag"
-    ],
-    "Tudomány & Tech": [
-        "https://telex.hu/rss/rovat/techtud",
-        "https://index.hu/24ora/rss/?feed=techtud"
-    ],
-    "Klíma & Környezet": [
-        "https://masfelfok.hu/feed/",
-        "https://www.greenpeace.org/hungary/feed/"
-    ],
-    "Sport (Válogatott, Szoboszlai, F1, BL)": [
-        "https://telex.hu/rss/rovat/sport",
-        "https://index.hu/24ora/rss/?feed=sport",
-        "https://m4sport.hu/feed/"
-    ]
+# --- CONFIG: RSS FORRÁSOK & KATEGÓRIA KULCSSZAVAK ---
+NEWS_FEEDS = {
+    "Telex": "https://telex.hu/rss",
+    "Index": "https://index.hu/24ora/rss/",
+    "M4 Sport": "https://m4sport.hu/feed/",
+    "Másfélfok": "https://masfelfok.hu/feed/",
+    "Greenpeace": "https://www.greenpeace.org/hungary/feed/"
 }
 
+CATEGORY_KEYWORDS = {
+    "Belpolitika": ["kormány", "parlament", "orbán", "választás", "fidesz", "tisza", "miniszter", "belföld", "magyarország", "politika", "bíróság", "törvény"],
+    "Külpolitika": ["eu", "usa", "kína", "unió", "brüsszel", "nato", "németország", "franciaország", "közel-kelet", "ukrajna", "orosz", "trump", "putyin", "zelenszkij", "külföld"],
+    "Gazdaság": ["infláció", "forint", "euró", "mnb", "költségvetés", "adózás", "hitel", "kamat", "bank", "gazdaság", "gdp", "áremelés", "befektetés"],
+    "Tudomány & Tech": ["mesterséges intelligencia", "ai", "nasa", "kutatás", "fejlesztés", "űrkutatás", "szoftver", "chip", "tech", "okostelefon", "tudomány", "innováció", "kiber"],
+    "Klíma & Környezet": ["klíma", "felmelegedés", "aszály", "megújuló", "szén-dioxid", "környezet", "időjárás", "energia", "zöld", "hulladék", "emisszió"],
+    "Sport (Válogatott, Szoboszlai, F1, BL)": ["szoboszlai", "magyar válogatott", "f1", "formula1", "forma1", "bajnokok ligája", "bl", "eb", "vb", "bajnokság", "foci", "liverpool"]
+}
+
+PORTFOLIO_HU_RSS = "https://www.portfolio.hu/rss/befektetes.xml"
+
 def get_portfolio_hu_top3():
-    """Top 3 tőzsdei hír a Portfolio.hu-ról RSS-ből vagy webscrappinggel"""
+    """Top 3 tőzsdei hír a Portfolio.hu-ról RSS-ből vagy webscrapinggel"""
     items = []
-    # 1. Próbálkozás a befektetési RSS-sel
     try:
-        p_feed = feedparser.parse("https://www.portfolio.hu/rss/befektetes.xml")
+        p_feed = feedparser.parse(PORTFOLIO_HU_RSS)
         for entry in p_feed.entries:
             items.append(f"<li><a href='{entry.link}'>{entry.title}</a></li>")
             if len(items) >= 3:
@@ -67,7 +57,6 @@ def get_portfolio_hu_top3():
     except Exception:
         pass
 
-    # 2. Fallback webscraping a Portfolio.hu Tőzsde címkéről
     if len(items) < 3:
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
@@ -132,8 +121,6 @@ def get_stock_trends_and_news():
             html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
-    
-    # Portfolio.hu Top 3 Hír beillesztése
     html += get_portfolio_hu_top3()
     return html
 
@@ -155,67 +142,60 @@ def get_weather():
     return html
 
 def get_categorized_news():
-    """Rovat-specifikus hírek gyűjtése 5-ös limittel, BL és sport szűrővel"""
-    sport_keywords = [
-        "szoboszlai", "magyar válogatott", "magyar", "f1", "formula1", "forma1", 
-        "bajnokok ligája", "bl", "eb", "vb", "bajnokság", "foci"
-    ]
-    bl_keywords = ["bajnokok ligája", "bl"]
+    """Tiszta kategória-alapú hírszűrés duplikáció-gátlóval"""
+    all_articles = []
+    
+    # 1. Minden cikk beolvasása az RSS forrásokból
+    for source_name, feed_url in NEWS_FEEDS.items():
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries:
+                all_articles.append({
+                    "source": source_name,
+                    "title": entry.title,
+                    "link": entry.link
+                })
+        except Exception:
+            continue
 
-    html = "<h3>Napi Hírösszefoglaló (Rovatok szerinti bontásban)</h3>"
+    used_links = set()
+    html = "<h3>Napi Hírösszefoglaló (Kategóriák szerint szétválogatva)</h3>"
 
-    for cat_name, rss_list in CATEGORY_FEEDS.items():
+    # 2. Kategorizálás és duplikációk kiszűrése
+    for cat_name, keywords in CATEGORY_KEYWORDS.items():
         matched_items = []
-        bl_items = []
-        other_sport_items = []
 
-        for feed_url in rss_list:
-            try:
-                feed = feedparser.parse(feed_url)
-                for entry in feed.entries:
-                    title = entry.title
-                    link = entry.link
-                    
-                    if "telex" in feed_url:
-                        source = "Telex"
-                    elif "index" in feed_url:
-                        source = "Index"
-                    elif "m4sport" in feed_url:
-                        source = "M4 Sport"
-                    elif "masfelfok" in feed_url:
-                        source = "Másfélfok"
-                    elif "greenpeace" in feed_url:
-                        source = "Greenpeace"
-                    else:
-                        source = "Hírek"
-
-                    item_html = f"<li>[<b>{source}</b>] <a href='{link}'>{title}</a></li>"
-
-                    if cat_name.startswith("Sport"):
-                        title_lower = title.lower()
-                        if any(kw in title_lower for kw in bl_keywords):
-                            if item_html not in bl_items:
-                                bl_items.append(item_html)
-                        elif any(kw in title_lower for kw in sport_keywords):
-                            if item_html not in other_sport_items:
-                                other_sport_items.append(item_html)
-                    else:
-                        if item_html not in matched_items:
-                            matched_items.append(item_html)
-
-                    if not cat_name.startswith("Sport") and len(matched_items) >= 5:
-                        break
-            except Exception:
+        for article in all_articles:
+            if article["link"] in used_links:
                 continue
 
-        if cat_name.startswith("Sport"):
-            matched_items = (bl_items + other_sport_items)[:5]
+            title_lower = article["title"].lower()
+
+            # Speciális forrás prioritás Klíma és Sport esetén
+            if cat_name.startswith("Klíma") and article["source"] in ["Másfélfok", "Greenpeace"]:
+                matched_items.append(article)
+                used_links.add(article["link"])
+            elif cat_name.startswith("Sport") and article["source"] == "M4 Sport":
+                matched_items.append(article)
+                used_links.add(article["link"])
+            elif any(kw in title_lower for kw in keywords):
+                # Politikai kizárás a Tech kategóriából
+                if cat_name == "Tudomány & Tech" and any(bad in title_lower for bad in ["orbán", "fidesz", "tisza", "kormány", "bíróság"]):
+                    continue
+                matched_items.append(article)
+                used_links.add(article["link"])
+
+            if len(matched_items) >= 5:
+                break
 
         html += f"<h4>{cat_name}</h4>"
         if matched_items:
-            html += "<ul>" + "".join(matched_items[:5]) + "</ul>"
+            html += "<ul>"
+            for item in matched_items[:5]:
+                html += f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>"
+            html += "</ul>"
         else:
-            html += "<p><i>Nincs friss hír ebben a rovatban.</i></p>"
+            html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
     return html
 
