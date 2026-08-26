@@ -1,6 +1,7 @@
-import os
+import import os
 import smtplib
 import datetime
+import urllib.request
 import requests
 import feedparser
 import yfinance as yf
@@ -31,7 +32,6 @@ NEWS_FEEDS = {
     "Greenpeace": "https://www.greenpeace.org/hungary/feed/"
 }
 
-# Kizárólag tiszta és dedikált sporthír források (Index és Telex kiszűrve)
 SPORT_FEEDS = {
     "Nemzeti Sport": "https://www.nemzetisport.hu/rss",
     "M4 Sport": "https://m4sport.hu/feed/"
@@ -119,7 +119,7 @@ def get_stock_trends_and_news():
                 html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(btd_change)}</b></td></tr>"
             else:
                 html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td colspan='5'><i>Adatfrissítés alatt</i></td></tr>"
-        except Exception as e:
+        except Exception:
             html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
@@ -143,11 +143,24 @@ def get_weather():
             html += f"<p><b>{city}:</b> Nem érhető el az időjárás adat.</p>"
     return html
 
+def fetch_feed_with_headers(url):
+    """RSS lekérése böngésző-fejléccel a 403 Forbidden kivédésére"""
+    try:
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content = resp.read()
+        return feedparser.parse(content)
+    except Exception:
+        return feedparser.parse(url)
+
 def get_categorized_news():
     all_articles = []
     for source_name, feed_url in NEWS_FEEDS.items():
         try:
-            feed = feedparser.parse(feed_url)
+            feed = fetch_feed_with_headers(feed_url)
             for entry in feed.entries:
                 all_articles.append({
                     "source": source_name,
@@ -188,11 +201,11 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
-    # Dedikált Sport gyűjtő (Kizárólag Nemzeti Sport és M4 Sport)
+    # Dedikált Sport gyűjtő böngészős fejléccel és HTML fallbackel
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
-            feed = feedparser.parse(feed_url)
+            feed = fetch_feed_with_headers(feed_url)
             for entry in feed.entries:
                 sport_articles.append({
                     "source": source_name,
@@ -202,10 +215,29 @@ def get_categorized_news():
         except Exception:
             continue
 
+    # Fallback webscraping, ha az RSS üres lenne
+    if not sport_articles:
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            res = requests.get("https://www.nemzetisport.hu/", headers=headers, timeout=5)
+            soup = BeautifulSoup(res.text, 'html.parser')
+            for a_tag in soup.find_all('a', href=True):
+                href = a_tag['href']
+                title = a_tag.text.strip()
+                if len(title) > 25 and href.startswith('http'):
+                    sport_articles.append({
+                        "source": "Nemzeti Sport",
+                        "title": title,
+                        "link": href
+                    })
+                if len(sport_articles) >= 15:
+                    break
+        except Exception:
+            pass
+
     sport_matches = []
     sport_links = set()
 
-    # Első kör: Kiemelt kulcsszavas hírek (BL, Szoboszlai, F1, Válogatott)
     for article in sport_articles:
         title_lower = article["title"].lower()
         if any(kw in title_lower for kw in SPORT_KEYWORDS):
@@ -215,7 +247,6 @@ def get_categorized_news():
         if len(sport_matches) >= 5:
             break
 
-    # Második kör: Ha nincsenek közvetlen kulcsszavas cikkek, feltöltés a legfrissebb vezető sporthírekkel
     if len(sport_matches) < 5:
         for article in sport_articles:
             if article["link"] not in sport_links:
