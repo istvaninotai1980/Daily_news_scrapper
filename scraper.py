@@ -4,6 +4,7 @@ import datetime
 import requests
 import feedparser
 import yfinance as yf
+from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -53,13 +54,46 @@ CATEGORY_FEEDS = {
     ]
 }
 
-PORTFOLIO_HU_RSS = "https://www.portfolio.hu/rss/tozsde.xml"
+def get_portfolio_hu_top3():
+    """Top 3 tőzsdei hír a Portfolio.hu-ról RSS-ből vagy webscrappinggel"""
+    items = []
+    # 1. Próbálkozás a befektetési RSS-sel
+    try:
+        p_feed = feedparser.parse("https://www.portfolio.hu/rss/befektetes.xml")
+        for entry in p_feed.entries:
+            items.append(f"<li><a href='{entry.link}'>{entry.title}</a></li>")
+            if len(items) >= 3:
+                break
+    except Exception:
+        pass
+
+    # 2. Fallback webscraping a Portfolio.hu Tőzsde címkéről
+    if len(items) < 3:
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            res = requests.get("https://www.portfolio.hu/cimke/T%C5%91zsde", headers=headers, timeout=10)
+            soup = BeautifulSoup(res.text, 'html.parser')
+            for a_tag in soup.find_all('a', href=True):
+                href = a_tag['href']
+                title = a_tag.text.strip()
+                if href.startswith('https://www.portfolio.hu/') and len(title) > 25:
+                    item_html = f"<li><a href='{href}'>{title}</a></li>"
+                    if item_html not in items:
+                        items.append(item_html)
+                if len(items) >= 3:
+                    break
+        except Exception:
+            pass
+
+    if items:
+        return "<h4>Top 3 Tőzsdei Hír (Portfolio.hu)</h4><ul>" + "".join(items[:3]) + "</ul>"
+    else:
+        return "<p><i>A Portfolio.hu tőzsdei hírei jelenleg nem érhetőek el.</i></p>"
 
 def get_stock_trends_and_news():
     """Részvények és ETF-ek BTD (Buy To Date) mutatói és Portfolio.hu hírek"""
     html = "<h3>Tőzsdei Portfólió Trendek & BTD Teljesítmény</h3>"
     
-    # Hiányellenőrzés
     if len(PORTFOLIO) < EXPECTED_COUNT:
         html += f"<p style='color:red;'><b>Figyelem:</b> A beállított portfólióban csak {len(PORTFOLIO)} eszköz szerepel a várt {EXPECTED_COUNT} helyett!</p>"
 
@@ -80,7 +114,6 @@ def get_stock_trends_and_news():
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
                 
-                # BTD (Buy To Date) számítás a megadott dátum óta
                 hist_buy = hist[hist.index >= buy_date]
                 if not hist_buy.empty:
                     buy_price = hist_buy['Close'].iloc[0]
@@ -99,21 +132,9 @@ def get_stock_trends_and_news():
             html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
-
-    # Top 3 Portfolio.hu Tőzsde hír
-    try:
-        p_feed = feedparser.parse(PORTFOLIO_HU_RSS)
-        html += "<h4>Top 3 Tőzsdei Hír (Portfolio.hu)</h4><ul>"
-        count = 0
-        for entry in p_feed.entries:
-            html += f"<li><a href='{entry.link}'>{entry.title}</a></li>"
-            count += 1
-            if count >= 3:
-                break
-        html += "</ul>"
-    except Exception:
-        html += "<p><i>A Portfolio.hu hírei nem érhetőek el.</i></p>"
-
+    
+    # Portfolio.hu Top 3 Hír beillesztése
+    html += get_portfolio_hu_top3()
     return html
 
 def get_weather():
