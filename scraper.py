@@ -7,38 +7,72 @@ import yfinance as yf
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# --- CONFIG: RÉSZVÉNYEK & ETF-EK (Javított ticker-struktúra) ---
-STOCKS = {
-    "Amazon (AMZ)": "AMZN",
-    "Defence ETF (ARMY)": "DFEN",
-    "Copper ETF (COPG)": "CPER",
-    "Constellation Software (CSU)": "CSU.TO",
-    "Global Growth ETF (GGRW)": "IWDA.AS",
-    "Physical Silver (ISLN)": "SLV",
-    "Microsoft (MSF)": "MSFT",
-    "OTP Bank (OTP)": "OTP.BU",
-    "S&P 500 Info Tech (QDV5)": "XLK",
-    "TSMC (TSM)": "TSM",
-    "S&P 500 ETF (VUSA)": "VOO"
+# --- CONFIG: RÉSZVÉNYEK, ETF-EK & VÁSÁRLÁSI DÁTUMOK (BTD) ---
+PORTFOLIO = {
+    "Amazon (AMZ)": {"ticker": "AMZN", "buy_date": "2026-07-29"},
+    "TSMC (TSM)": {"ticker": "TSM", "buy_date": "2026-07-28"},
+    "Microsoft (MSF)": {"ticker": "MSFT", "buy_date": "2026-04-16"},
+    "OTP Bank (OTP)": {"ticker": "OTP.BU", "buy_date": "2026-03-06"},
+    "Physical Silver (ISLN)": {"ticker": "SLV", "buy_date": "2026-03-06"},
+    "Constellation Software (CSU)": {"ticker": "CSU.TO", "buy_date": "2026-01-28"},
+    "Defence ETF (ARMY)": {"ticker": "DFEN", "buy_date": "2026-01-19"},
+    "S&P 500 Info Tech (QDV5)": {"ticker": "XLK", "buy_date": "2026-01-19"},
+    "Copper ETF (COPG)": {"ticker": "CPER", "buy_date": "2026-01-19"},
+    "Global Growth ETF (GGRW)": {"ticker": "IWDA.AS", "buy_date": "2026-01-15"},
+    "S&P 500 ETF (VUSA)": {"ticker": "VOO", "buy_date": "2026-01-15"}
 }
 
-FEEDS = {
-    "Telex": "https://telex.hu/rss",
-    "Index": "https://index.hu/24ora/rss/",
-    "M4 Sport": "https://m4sport.hu/feed/",
-    "Nemzeti Sport": "https://www.nemzetisport.hu/rss"
+EXPECTED_COUNT = 11
+
+# --- CONFIG: ROVAT-SPECIFIKUS RSS FORRÁSOK ---
+CATEGORY_FEEDS = {
+    "Belpolitika": [
+        "https://telex.hu/rss/rovat/belfold",
+        "https://index.hu/24ora/rss/?feed=belfold"
+    ],
+    "Külpolitika": [
+        "https://telex.hu/rss/rovat/kulfold",
+        "https://index.hu/24ora/rss/?feed=kulfold"
+    ],
+    "Gazdaság": [
+        "https://telex.hu/rss/rovat/gazdasag",
+        "https://index.hu/24ora/rss/?feed=gazdasag"
+    ],
+    "Tudomány & Tech": [
+        "https://telex.hu/rss/rovat/techtud",
+        "https://index.hu/24ora/rss/?feed=techtud"
+    ],
+    "Klíma & Környezet": [
+        "https://masfelfok.hu/feed/",
+        "https://www.greenpeace.org/hungary/feed/"
+    ],
+    "Sport (Válogatott, Szoboszlai, F1, BL)": [
+        "https://telex.hu/rss/rovat/sport",
+        "https://index.hu/24ora/rss/?feed=sport",
+        "https://m4sport.hu/feed/"
+    ]
 }
+
+PORTFOLIO_HU_RSS = "https://www.portfolio.hu/rss/tozsde.xml"
 
 def get_stock_trends_and_news():
-    """Részvények és ETF-ek stabil adatlekérése YTD és trend mutatókkal"""
-    html = "<h3>Tőzsdei Portfólió Trendek & Hírérték</h3>"
-    html += "<table border='1' cellpadding='5' style='border-collapse:collapse; width:100%;'>"
-    html += "<tr style='background-color:#f2f2f2;'><th>Eszköz</th><th>Ár</th><th>Napi %</th><th>Heti %</th><th>Havi %</th><th>2026 YTD %</th></tr>"
+    """Részvények és ETF-ek BTD (Buy To Date) mutatói és Portfolio.hu hírek"""
+    html = "<h3>Tőzsdei Portfólió Trendek & BTD Teljesítmény</h3>"
     
-    for name, ticker_symbol in STOCKS.items():
+    # Hiányellenőrzés
+    if len(PORTFOLIO) < EXPECTED_COUNT:
+        html += f"<p style='color:red;'><b>Figyelem:</b> A beállított portfólióban csak {len(PORTFOLIO)} eszköz szerepel a várt {EXPECTED_COUNT} helyett!</p>"
+
+    html += "<table border='1' cellpadding='5' style='border-collapse:collapse; width:100%;'>"
+    html += "<tr style='background-color:#f2f2f2;'><th>Eszköz</th><th>Vásárlás dátuma</th><th>Ár</th><th>Napi %</th><th>Heti %</th><th>Havi %</th><th>BTD % (Vásárlás óta)</th></tr>"
+    
+    for name, data in PORTFOLIO.items():
         try:
+            ticker_symbol = data["ticker"]
+            buy_date = data["buy_date"]
+            
             ticker = yf.Ticker(ticker_symbol)
-            hist = ticker.history(period="1y")
+            hist = ticker.history(period="max")
 
             if not hist.empty and len(hist) >= 2:
                 current_price = hist['Close'].iloc[-1]
@@ -46,25 +80,40 @@ def get_stock_trends_and_news():
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
                 
-                # YTD számítás (2026-01-01 óta)
-                hist_2026 = hist[hist.index >= '2026-01-01']
-                if not hist_2026.empty:
-                    start_price = hist_2026['Close'].iloc[0]
-                    ytd_change = ((current_price - start_price) / start_price) * 100
+                # BTD (Buy To Date) számítás a megadott dátum óta
+                hist_buy = hist[hist.index >= buy_date]
+                if not hist_buy.empty:
+                    buy_price = hist_buy['Close'].iloc[0]
+                    btd_change = ((current_price - buy_price) / buy_price) * 100
                 else:
-                    ytd_change = daily_change
+                    btd_change = daily_change
 
                 def fmt(val):
                     color = "green" if val >= 0 else "red"
                     return f"<span style='color:{color};'>{val:+.2f}%</span>"
 
-                html += f"<tr><td><b>{name}</b></td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(ytd_change)}</b></td></tr>"
+                html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(btd_change)}</b></td></tr>"
             else:
-                html += f"<tr><td><b>{name}</b></td><td colspan='5'><i>Adatfrissítés alatt</i></td></tr>"
+                html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td colspan='5'><i>Adatfrissítés alatt</i></td></tr>"
         except Exception:
-            html += f"<tr><td><b>{name}</b></td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
+            html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
+
+    # Top 3 Portfolio.hu Tőzsde hír
+    try:
+        p_feed = feedparser.parse(PORTFOLIO_HU_RSS)
+        html += "<h4>Top 3 Tőzsdei Hír (Portfolio.hu)</h4><ul>"
+        count = 0
+        for entry in p_feed.entries:
+            html += f"<li><a href='{entry.link}'>{entry.title}</a></li>"
+            count += 1
+            if count >= 3:
+                break
+        html += "</ul>"
+    except Exception:
+        html += "<p><i>A Portfolio.hu hírei nem érhetőek el.</i></p>"
+
     return html
 
 def get_weather():
@@ -85,52 +134,68 @@ def get_weather():
     return html
 
 def get_categorized_news():
-    categories = {
-        "Belpolitika": ["kormány", "parlament", "orbán", "választás", "fidesz", "tisza", "miniszter", "magyarország", "politika"],
-        "Külpolitika": ["eu", "usa", "kína", "unió", "brüsszel", "nato", "németország", "franciaország", "közel-kelet", "ukrajna", "orosz"],
-        "Gazdaság": ["infláció", "forint", "euró", "mnb", "költségvetés", "adózás", "hitel", "kamat", "bank", "gazdaság"],
-        "Tudomány & Tech": ["mesterséges intelligencia", "ai", "nasa", "kutatás", "fejlesztés", "űrkutatás", "szoftver", "chip", "tech", "okostelefon"],
-        "Klíma & Környezet": ["klíma", "felmelegedés", "aszály", "megújuló", "szén-dioxid", "környezet", "időjárás", "energia", "zöld", "hulladék"],
-        "Sport (Válogatott & Liverpool)": ["szoboszlai", "liverpool", "válogatott", "foci", "eb", "vb", "liga", "bajnokság", "meccs", "főnix", "sport"]
-    }
-    
-    all_entries = []
+    """Rovat-specifikus hírek gyűjtése 5-ös limittel, BL és sport szűrővel"""
+    sport_keywords = [
+        "szoboszlai", "magyar válogatott", "magyar", "f1", "formula1", "forma1", 
+        "bajnokok ligája", "bl", "eb", "vb", "bajnokság", "foci"
+    ]
+    bl_keywords = ["bajnokok ligája", "bl"]
 
-    # Megszüntettük a szigorú 24 órás dátumszűrést, hogy biztosan meglegyen az 5 cikk kategóriánként!
-    for source, url in FEEDS.items():
-        feed = feedparser.parse(url)
-        for entry in feed.entries:
-            all_entries.append({"source": source, "title": entry.title, "link": entry.link})
+    html = "<h3>Napi Hírösszefoglaló (Rovatok szerinti bontásban)</h3>"
 
-    html = "<h3>Napi Hírösszefoglaló (Top 5 hír kategóriánként)</h3>"
-    
-    for cat, kw_list in categories.items():
+    for cat_name, rss_list in CATEGORY_FEEDS.items():
         matched_items = []
-        for item in all_entries:
-            title_lower = item["title"].lower()
-            
-            # Kizárás a Tech kategóriából a tisztaság kedvéért
-            if cat == "Tudomány & Tech" and any(bad in title_lower for bad in ["orbán", "fidesz", "tisza", "kormány", "bíróság"]):
-                continue
-            
-            # Külön szabály a Sportra: az M4 Sport és Nemzeti Sport hírei automatikusan bekerülnek
-            if cat == "Sport (Válogatott & Liverpool)":
-                if item["source"] in ["M4 Sport", "Nemzeti Sport"] or any(kw in title_lower for kw in kw_list):
-                    matched_items.append(f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>")
-            else:
-                if any(kw in title_lower for kw in kw_list):
-                    matched_items.append(f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>")
-            
-            # Keresünk pontosan 5 találatot!
-            if len(matched_items) >= 5:
-                break
+        bl_items = []
+        other_sport_items = []
 
-        html += f"<h4>{cat}</h4>"
+        for feed_url in rss_list:
+            try:
+                feed = feedparser.parse(feed_url)
+                for entry in feed.entries:
+                    title = entry.title
+                    link = entry.link
+                    
+                    if "telex" in feed_url:
+                        source = "Telex"
+                    elif "index" in feed_url:
+                        source = "Index"
+                    elif "m4sport" in feed_url:
+                        source = "M4 Sport"
+                    elif "masfelfok" in feed_url:
+                        source = "Másfélfok"
+                    elif "greenpeace" in feed_url:
+                        source = "Greenpeace"
+                    else:
+                        source = "Hírek"
+
+                    item_html = f"<li>[<b>{source}</b>] <a href='{link}'>{title}</a></li>"
+
+                    if cat_name.startswith("Sport"):
+                        title_lower = title.lower()
+                        if any(kw in title_lower for kw in bl_keywords):
+                            if item_html not in bl_items:
+                                bl_items.append(item_html)
+                        elif any(kw in title_lower for kw in sport_keywords):
+                            if item_html not in other_sport_items:
+                                other_sport_items.append(item_html)
+                    else:
+                        if item_html not in matched_items:
+                            matched_items.append(item_html)
+
+                    if not cat_name.startswith("Sport") and len(matched_items) >= 5:
+                        break
+            except Exception:
+                continue
+
+        if cat_name.startswith("Sport"):
+            matched_items = (bl_items + other_sport_items)[:5]
+
+        html += f"<h4>{cat_name}</h4>"
         if matched_items:
-            html += "<ul>" + "".join(matched_items) + "</ul>"
+            html += "<ul>" + "".join(matched_items[:5]) + "</ul>"
         else:
-            html += "<p><i>Nincs kiemelt friss hír ebben a témában.</i></p>"
-            
+            html += "<p><i>Nincs friss hír ebben a rovatban.</i></p>"
+
     return html
 
 def send_email(body_content):
@@ -172,10 +237,3 @@ if __name__ == "__main__":
         "stocks": stock_data,
         "news": news_data
     })
-
-
-
-
-
-
-
