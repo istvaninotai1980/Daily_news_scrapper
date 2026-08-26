@@ -1,4 +1,4 @@
-import os
+importimport os
 import smtplib
 import datetime
 import requests
@@ -28,10 +28,15 @@ EXPECTED_COUNT = 11
 NEWS_FEEDS = {
     "Telex": "https://telex.hu/rss",
     "Index": "https://index.hu/24ora/rss/",
-    "M4 Sport": "https://m4sport.hu/feed/",
-    "Nemzeti Sport": "https://www.nemzetisport.hu/rss",
     "Másfélfok": "https://masfelfok.hu/feed/",
     "Greenpeace": "https://www.greenpeace.org/hungary/feed/"
+}
+
+SPORT_FEEDS = {
+    "Nemzeti Sport": "https://www.nemzetisport.hu/rss",
+    "M4 Sport": "https://m4sport.hu/feed/",
+    "Index Sport": "https://index.hu/24ora/rss/?feed=sport",
+    "Telex Sport": "https://telex.hu/rss/rovat/sport"
 }
 
 CATEGORY_KEYWORDS = {
@@ -42,7 +47,7 @@ CATEGORY_KEYWORDS = {
     "Klíma & Környezet": ["klíma", "felmelegedés", "aszály", "megújuló", "szén-dioxid", "környezet", "időjárás", "energia", "zöld", "hulladék", "emisszió"]
 }
 
-SPORT_KEYWORDS = ["szoboszlai", "magyar válogatott", "f1", "formula1", "forma1", "bajnokok ligája", "bl", "eb", "vb", "bajnokság", "foci", "liverpool"]
+SPORT_KEYWORDS = ["szoboszlai", "magyar válogatott", "f1", "formula1", "forma1", "bajnokok ligája", "bl", "eb", "vb", "bajnokság", "foci", "liverpool", "magyar"]
 
 PORTFOLIO_HU_RSS = "https://www.portfolio.hu/rss/befektetes.xml"
 
@@ -142,7 +147,6 @@ def get_weather():
 
 def get_categorized_news():
     all_articles = []
-    
     for source_name, feed_url in NEWS_FEEDS.items():
         try:
             feed = feedparser.parse(feed_url)
@@ -158,14 +162,12 @@ def get_categorized_news():
     used_links = set()
     html = "<h3>Napi Hírösszefoglaló</h3>"
 
-    # 1. Alapvető kategóriák feldolgozása
+    # 1. Általános kategóriák
     for cat_name, keywords in CATEGORY_KEYWORDS.items():
         matched_items = []
-
         for article in all_articles:
             if article["link"] in used_links:
                 continue
-
             title_lower = article["title"].lower()
 
             if cat_name.startswith("Klíma") and article["source"] in ["Másfélfok", "Greenpeace"]:
@@ -189,35 +191,46 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
-    # 2. Sport kategória dedikált feldolgozása (BL, Szoboszlai, F1 előnyben, egyébként Nemzeti Sport / M4 hírek)
-    sport_items = []
-    
-    # Kiemelt sporthírek szűrése
-    for article in all_articles:
-        if article["link"] in used_links:
+    # 2. Függetlenített Sport Hírek
+    sport_articles = []
+    for source_name, feed_url in SPORT_FEEDS.items():
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries:
+                sport_articles.append({
+                    "source": source_name,
+                    "title": entry.title,
+                    "link": entry.link
+                })
+        except Exception:
             continue
+
+    sport_matches = []
+    sport_links = set()
+
+    # Első kör: Kiemelt kulcsszavas hírek (BL, Szoboszlai, F1, Válogatott)
+    for article in sport_articles:
         title_lower = article["title"].lower()
         if any(kw in title_lower for kw in SPORT_KEYWORDS):
-            sport_items.append(article)
-            used_links.add(article["link"])
-        if len(sport_items) >= 5:
+            if article["link"] not in sport_links:
+                sport_matches.append(article)
+                sport_links.add(article["link"])
+        if len(sport_matches) >= 5:
             break
 
-    # Ha nincsenek specifikus találatok, feltöltjük a Nemzeti Sport és M4 Sport friss híreivel
-    if len(sport_items) < 5:
-        for article in all_articles:
-            if article["link"] in used_links:
-                continue
-            if article["source"] in ["Nemzeti Sport", "M4 Sport"]:
-                sport_items.append(article)
-                used_links.add(article["link"])
-            if len(sport_items) >= 5:
+    # Második kör: Ha nincs meg az 5 kulcsszavas hír, feltöltés a vezető sporthírekkel
+    if len(sport_matches) < 5:
+        for article in sport_articles:
+            if article["link"] not in sport_links:
+                sport_matches.append(article)
+                sport_links.add(article["link"])
+            if len(sport_matches) >= 5:
                 break
 
     html += "<h4>Sport (Válogatott, Szoboszlai, F1, BL)</h4>"
-    if sport_items:
+    if sport_matches:
         html += "<ul>"
-        for item in sport_items[:5]:
+        for item in sport_matches[:5]:
             html += f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>"
         html += "</ul>"
     else:
