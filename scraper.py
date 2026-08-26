@@ -25,11 +25,11 @@ PORTFOLIO = {
 
 EXPECTED_COUNT = 11
 
-# --- CONFIG: RSS FORRÁSOK & KATEGÓRIA KULCSSZAVAK ---
 NEWS_FEEDS = {
     "Telex": "https://telex.hu/rss",
     "Index": "https://index.hu/24ora/rss/",
     "M4 Sport": "https://m4sport.hu/feed/",
+    "Nemzeti Sport": "https://www.nemzetisport.hu/rss",
     "Másfélfok": "https://masfelfok.hu/feed/",
     "Greenpeace": "https://www.greenpeace.org/hungary/feed/"
 }
@@ -39,14 +39,14 @@ CATEGORY_KEYWORDS = {
     "Külpolitika": ["eu", "usa", "kína", "unió", "brüsszel", "nato", "németország", "franciaország", "közel-kelet", "ukrajna", "orosz", "trump", "putyin", "zelenszkij", "külföld"],
     "Gazdaság": ["infláció", "forint", "euró", "mnb", "költségvetés", "adózás", "hitel", "kamat", "bank", "gazdaság", "gdp", "áremelés", "befektetés"],
     "Tudomány & Tech": ["mesterséges intelligencia", "ai", "nasa", "kutatás", "fejlesztés", "űrkutatás", "szoftver", "chip", "tech", "okostelefon", "tudomány", "innováció", "kiber"],
-    "Klíma & Környezet": ["klíma", "felmelegedés", "aszály", "megújuló", "szén-dioxid", "környezet", "időjárás", "energia", "zöld", "hulladék", "emisszió"],
-    "Sport (Válogatott, Szoboszlai, F1, BL)": ["szoboszlai", "magyar válogatott", "f1", "formula1", "forma1", "bajnokok ligája", "bl", "eb", "vb", "bajnokság", "foci", "liverpool"]
+    "Klíma & Környezet": ["klíma", "felmelegedés", "aszály", "megújuló", "szén-dioxid", "környezet", "időjárás", "energia", "zöld", "hulladék", "emisszió"]
 }
+
+SPORT_KEYWORDS = ["szoboszlai", "magyar válogatott", "f1", "formula1", "forma1", "bajnokok ligája", "bl", "eb", "vb", "bajnokság", "foci", "liverpool"]
 
 PORTFOLIO_HU_RSS = "https://www.portfolio.hu/rss/befektetes.xml"
 
 def get_portfolio_hu_top3():
-    """Top 3 tőzsdei hír a Portfolio.hu-ról RSS-ből vagy webscrapinggel"""
     items = []
     try:
         p_feed = feedparser.parse(PORTFOLIO_HU_RSS)
@@ -80,7 +80,6 @@ def get_portfolio_hu_top3():
         return "<p><i>A Portfolio.hu tőzsdei hírei jelenleg nem érhetőek el.</i></p>"
 
 def get_stock_trends_and_news():
-    """Részvények és ETF-ek BTD (Buy To Date) mutatói és Portfolio.hu hírek"""
     html = "<h3>Tőzsdei Portfólió Trendek & BTD Teljesítmény</h3>"
     
     if len(PORTFOLIO) < EXPECTED_COUNT:
@@ -142,10 +141,8 @@ def get_weather():
     return html
 
 def get_categorized_news():
-    """Tiszta kategória-alapú hírszűrés duplikáció-gátlóval"""
     all_articles = []
     
-    # 1. Minden cikk beolvasása az RSS forrásokból
     for source_name, feed_url in NEWS_FEEDS.items():
         try:
             feed = feedparser.parse(feed_url)
@@ -159,9 +156,9 @@ def get_categorized_news():
             continue
 
     used_links = set()
-    html = "<h3>Napi Hírösszefoglaló (Kategóriák szerint szétválogatva)</h3>"
+    html = "<h3>Napi Hírösszefoglaló</h3>"
 
-    # 2. Kategorizálás és duplikációk kiszűrése
+    # 1. Alapvető kategóriák feldolgozása
     for cat_name, keywords in CATEGORY_KEYWORDS.items():
         matched_items = []
 
@@ -171,15 +168,10 @@ def get_categorized_news():
 
             title_lower = article["title"].lower()
 
-            # Speciális forrás prioritás Klíma és Sport esetén
             if cat_name.startswith("Klíma") and article["source"] in ["Másfélfok", "Greenpeace"]:
                 matched_items.append(article)
                 used_links.add(article["link"])
-            elif cat_name.startswith("Sport") and article["source"] == "M4 Sport":
-                matched_items.append(article)
-                used_links.add(article["link"])
             elif any(kw in title_lower for kw in keywords):
-                # Politikai kizárás a Tech kategóriából
                 if cat_name == "Tudomány & Tech" and any(bad in title_lower for bad in ["orbán", "fidesz", "tisza", "kormány", "bíróság"]):
                     continue
                 matched_items.append(article)
@@ -196,6 +188,40 @@ def get_categorized_news():
             html += "</ul>"
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
+
+    # 2. Sport kategória dedikált feldolgozása (BL, Szoboszlai, F1 előnyben, egyébként Nemzeti Sport / M4 hírek)
+    sport_items = []
+    
+    # Kiemelt sporthírek szűrése
+    for article in all_articles:
+        if article["link"] in used_links:
+            continue
+        title_lower = article["title"].lower()
+        if any(kw in title_lower for kw in SPORT_KEYWORDS):
+            sport_items.append(article)
+            used_links.add(article["link"])
+        if len(sport_items) >= 5:
+            break
+
+    # Ha nincsenek specifikus találatok, feltöltjük a Nemzeti Sport és M4 Sport friss híreivel
+    if len(sport_items) < 5:
+        for article in all_articles:
+            if article["link"] in used_links:
+                continue
+            if article["source"] in ["Nemzeti Sport", "M4 Sport"]:
+                sport_items.append(article)
+                used_links.add(article["link"])
+            if len(sport_items) >= 5:
+                break
+
+    html += "<h4>Sport (Válogatott, Szoboszlai, F1, BL)</h4>"
+    if sport_items:
+        html += "<ul>"
+        for item in sport_items[:5]:
+            html += f"<li>[<b>{item['source']}</b>] <a href='{item['link']}'>{item['title']}</a></li>"
+        html += "</ul>"
+    else:
+        html += "<p><i>Nincs friss sporthír az elmúlt 24 órában.</i></p>"
 
     return html
 
