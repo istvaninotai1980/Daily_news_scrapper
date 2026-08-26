@@ -1,4 +1,4 @@
-importimport os
+import os
 import smtplib
 import datetime
 import requests
@@ -8,7 +8,6 @@ from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# --- CONFIG: RÉSZVÉNYEK, ETF-EK & VÁSÁRLÁSI DÁTUMOK (BTD) ---
 PORTFOLIO = {
     "Amazon (AMZ)": {"ticker": "AMZN", "buy_date": "2026-07-29"},
     "TSMC (TSM)": {"ticker": "TSM", "buy_date": "2026-07-28"},
@@ -65,7 +64,7 @@ def get_portfolio_hu_top3():
     if len(items) < 3:
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
-            res = requests.get("https://www.portfolio.hu/cimke/T%C5%91zsde", headers=headers, timeout=10)
+            res = requests.get("https://www.portfolio.hu/cimke/T%C5%91zsde", headers=headers, timeout=5)
             soup = BeautifulSoup(res.text, 'html.parser')
             for a_tag in soup.find_all('a', href=True):
                 href = a_tag['href']
@@ -99,7 +98,7 @@ def get_stock_trends_and_news():
             buy_date = data["buy_date"]
             
             ticker = yf.Ticker(ticker_symbol)
-            hist = ticker.history(period="max")
+            hist = ticker.history(period="1y")
 
             if not hist.empty and len(hist) >= 2:
                 current_price = hist['Close'].iloc[-1]
@@ -107,7 +106,8 @@ def get_stock_trends_and_news():
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
                 
-                hist_buy = hist[hist.index >= buy_date]
+                # Szigorú dátum szűrés string-alapon a biztonság kedvéért
+                hist_buy = hist[hist.index.astype(str) >= buy_date]
                 if not hist_buy.empty:
                     buy_price = hist_buy['Close'].iloc[0]
                     btd_change = ((current_price - buy_price) / buy_price) * 100
@@ -121,7 +121,8 @@ def get_stock_trends_and_news():
                 html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(btd_change)}</b></td></tr>"
             else:
                 html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td colspan='5'><i>Adatfrissítés alatt</i></td></tr>"
-        except Exception:
+        except Exception as e:
+            print(f"Hiba a(z) {name} lekérésekor: {e}")
             html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
@@ -135,7 +136,7 @@ def get_weather():
     for city, (lat, lon) in locations.items():
         try:
             url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FBudapest"
-            res = requests.get(url).json()
+            res = requests.get(url, timeout=5).json()
             daily = res['daily']
             max_t = daily['temperature_2m_max'][0]
             min_t = daily['temperature_2m_min'][0]
@@ -162,7 +163,6 @@ def get_categorized_news():
     used_links = set()
     html = "<h3>Napi Hírösszefoglaló</h3>"
 
-    # 1. Általános kategóriák
     for cat_name, keywords in CATEGORY_KEYWORDS.items():
         matched_items = []
         for article in all_articles:
@@ -191,7 +191,6 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
-    # 2. Függetlenített Sport Hírek
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
@@ -208,7 +207,6 @@ def get_categorized_news():
     sport_matches = []
     sport_links = set()
 
-    # Első kör: Kiemelt kulcsszavas hírek (BL, Szoboszlai, F1, Válogatott)
     for article in sport_articles:
         title_lower = article["title"].lower()
         if any(kw in title_lower for kw in SPORT_KEYWORDS):
@@ -218,7 +216,6 @@ def get_categorized_news():
         if len(sport_matches) >= 5:
             break
 
-    # Második kör: Ha nincs meg az 5 kulcsszavas hír, feltöltés a vezető sporthírekkel
     if len(sport_matches) < 5:
         for article in sport_articles:
             if article["link"] not in sport_links:
@@ -242,6 +239,10 @@ def send_email(body_content):
     sender = os.environ.get("SENDER_EMAIL")
     password = os.environ.get("SENDER_PASSWORD")
     receiver = os.environ.get("RECEIVER_EMAIL")
+
+    if not sender or not password or not receiver:
+        print("Hiányzó e-mail hitelesítési adatok!")
+        return
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"Napi Személyre Szabott Hír- és Portfólió Jelentés - {datetime.date.today().strftime('%Y.%m.%d')}"
