@@ -1,7 +1,6 @@
-import import os
+import os
 import smtplib
 import datetime
-import urllib.request
 import requests
 import feedparser
 import yfinance as yf
@@ -143,16 +142,12 @@ def get_weather():
             html += f"<p><b>{city}:</b> Nem érhető el az időjárás adat.</p>"
     return html
 
-def fetch_feed_with_headers(url):
-    """RSS lekérése böngésző-fejléccel a 403 Forbidden kivédésére"""
+def fetch_feed_safe(url):
+    """RSS lekérése requests könyvtárral (biztonságos timeout és User-Agent)"""
     try:
-        req = urllib.request.Request(
-            url, 
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            content = resp.read()
-        return feedparser.parse(content)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        resp = requests.get(url, headers=headers, timeout=8)
+        return feedparser.parse(resp.text)
     except Exception:
         return feedparser.parse(url)
 
@@ -160,7 +155,7 @@ def get_categorized_news():
     all_articles = []
     for source_name, feed_url in NEWS_FEEDS.items():
         try:
-            feed = fetch_feed_with_headers(feed_url)
+            feed = fetch_feed_safe(feed_url)
             for entry in feed.entries:
                 all_articles.append({
                     "source": source_name,
@@ -201,11 +196,10 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
-    # Dedikált Sport gyűjtő böngészős fejléccel és HTML fallbackel
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
-            feed = fetch_feed_with_headers(feed_url)
+            feed = fetch_feed_safe(feed_url)
             for entry in feed.entries:
                 sport_articles.append({
                     "source": source_name,
@@ -215,7 +209,6 @@ def get_categorized_news():
         except Exception:
             continue
 
-    # Fallback webscraping, ha az RSS üres lenne
     if not sport_articles:
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
