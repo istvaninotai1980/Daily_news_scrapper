@@ -2,8 +2,9 @@ name: Napi Automatikus Hírgyűjtő
 
 on:
   schedule:
-    # 04:55 CET / CEST időpontra időzítve (UTC 02:55 / 03:55)
-    - cron: '55 3 * * *'
+    # Magyar idő szerint kb. hajnali 04:35 - 04:45 között fusson le (UTC 02:35)
+    # A 35. percben nincs várakozási sor a GitHub szerverein.
+    - cron: '35 2 * * *'
   workflow_dispatch:
 
 jobs:
