@@ -1,3 +1,4 @@
+
 import os
 import smtplib
 import datetime
@@ -31,10 +32,10 @@ NEWS_FEEDS = {
     "Greenpeace": "https://www.greenpeace.org/hungary/feed/"
 }
 
+# Index Sport eltávolítva – kizárólag tiszta sportforrások
 SPORT_FEEDS = {
     "Nemzeti Sport": "https://www.nemzetisport.hu/rss",
     "M4 Sport": "https://m4sport.hu/feed/",
-    "Index Sport": "https://index.hu/24ora/rss/?feed=sport",
     "Telex Sport": "https://telex.hu/rss/rovat/sport"
 }
 
@@ -106,7 +107,6 @@ def get_stock_trends_and_news():
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
                 
-                # Szigorú dátum szűrés string-alapon a biztonság kedvéért
                 hist_buy = hist[hist.index.astype(str) >= buy_date]
                 if not hist_buy.empty:
                     buy_price = hist_buy['Close'].iloc[0]
@@ -122,7 +122,6 @@ def get_stock_trends_and_news():
             else:
                 html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td colspan='5'><i>Adatfrissítés alatt</i></td></tr>"
         except Exception as e:
-            print(f"Hiba a(z) {name} lekérésekor: {e}")
             html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
@@ -191,6 +190,7 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
+    # Dedikált Sport gyűjtő (Index nélkül)
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
@@ -241,7 +241,6 @@ def send_email(body_content):
     receiver = os.environ.get("RECEIVER_EMAIL")
 
     if not sender or not password or not receiver:
-        print("Hiányzó e-mail hitelesítési adatok!")
         return
 
     msg = MIMEMultipart("alternative")
