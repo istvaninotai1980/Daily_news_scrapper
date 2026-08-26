@@ -1,4 +1,3 @@
-
 import os
 import smtplib
 import datetime
@@ -32,11 +31,10 @@ NEWS_FEEDS = {
     "Greenpeace": "https://www.greenpeace.org/hungary/feed/"
 }
 
-# Index Sport eltávolítva – kizárólag tiszta sportforrások
+# Kizárólag tiszta és dedikált sporthír források (Index és Telex kiszűrve)
 SPORT_FEEDS = {
     "Nemzeti Sport": "https://www.nemzetisport.hu/rss",
-    "M4 Sport": "https://m4sport.hu/feed/",
-    "Telex Sport": "https://telex.hu/rss/rovat/sport"
+    "M4 Sport": "https://m4sport.hu/feed/"
 }
 
 CATEGORY_KEYWORDS = {
@@ -190,7 +188,7 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
-    # Dedikált Sport gyűjtő (Index nélkül)
+    # Dedikált Sport gyűjtő (Kizárólag Nemzeti Sport és M4 Sport)
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
@@ -207,6 +205,7 @@ def get_categorized_news():
     sport_matches = []
     sport_links = set()
 
+    # Első kör: Kiemelt kulcsszavas hírek (BL, Szoboszlai, F1, Válogatott)
     for article in sport_articles:
         title_lower = article["title"].lower()
         if any(kw in title_lower for kw in SPORT_KEYWORDS):
@@ -216,6 +215,7 @@ def get_categorized_news():
         if len(sport_matches) >= 5:
             break
 
+    # Második kör: Ha nincsenek közvetlen kulcsszavas cikkek, feltöltés a legfrissebb vezető sporthírekkel
     if len(sport_matches) < 5:
         for article in sport_articles:
             if article["link"] not in sport_links:
