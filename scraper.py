@@ -143,7 +143,6 @@ def get_weather():
     return html
 
 def fetch_feed_safe(url):
-    """RSS lekérése requests könyvtárral (biztonságos timeout és User-Agent)"""
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         resp = requests.get(url, headers=headers, timeout=8)
@@ -196,6 +195,7 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
+    # Dedikált Sport gyűjtő kifejezetten KONKRÉT cikk-link szűréssel
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
@@ -209,7 +209,8 @@ def get_categorized_news():
         except Exception:
             continue
 
-    if not sport_articles:
+    # Ha az RSS nem adna konkrét cikket, a Nemzeti Sport főoldaláról szedjük ki KIZÁRÓLAG A KONKRÉT CIKKEKET
+    if len(sport_articles) < 5:
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
             res = requests.get("https://www.nemzetisport.hu/", headers=headers, timeout=5)
@@ -217,11 +218,13 @@ def get_categorized_news():
             for a_tag in soup.find_all('a', href=True):
                 href = a_tag['href']
                 title = a_tag.text.strip()
-                if len(title) > 25 and href.startswith('http'):
+                # Kiszűrjük a rovatneveket és menüpontokat: csak valódi cikk-URL jöhet szóba
+                if len(title) > 30 and ("202" in href or ".html" in href or "/cikk/" in href or "/labdarugas/" in href or "/f1/" in href):
+                    full_link = href if href.startswith("http") else "https://www.nemzetisport.hu" + href
                     sport_articles.append({
                         "source": "Nemzeti Sport",
                         "title": title,
-                        "link": href
+                        "link": full_link
                     })
                 if len(sport_articles) >= 15:
                     break
@@ -231,6 +234,7 @@ def get_categorized_news():
     sport_matches = []
     sport_links = set()
 
+    # 1. Kör: Kiemelt kulcsszavas konkrét cikkek
     for article in sport_articles:
         title_lower = article["title"].lower()
         if any(kw in title_lower for kw in SPORT_KEYWORDS):
@@ -240,6 +244,7 @@ def get_categorized_news():
         if len(sport_matches) >= 5:
             break
 
+    # 2. Kör: Ha nincs meg az 5 kulcsszavas cikk, feltöltjük a legfrissebb konkrét sporthírekkel
     if len(sport_matches) < 5:
         for article in sport_articles:
             if article["link"] not in sport_links:
