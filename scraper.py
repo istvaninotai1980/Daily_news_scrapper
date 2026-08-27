@@ -48,6 +48,26 @@ SPORT_KEYWORDS = ["szoboszlai", "magyar válogatott", "f1", "formula1", "forma1"
 
 PORTFOLIO_HU_RSS = "https://www.portfolio.hu/rss/befektetes.xml"
 
+def get_fx_rate(currency_code, date_str=None):
+    """Deviza/HUF árfolyam lekérdezése yfinance-szel"""
+    if currency_code == "HUF":
+        return 1.0
+    
+    pair = f"{currency_code}HUF=X"
+    try:
+        ticker = yf.Ticker(pair)
+        hist = ticker.history(period="1y")
+        if hist.empty:
+            return 1.0
+        
+        if date_str:
+            hist_sub = hist[hist.index.astype(str) >= date_str]
+            if not hist_sub.empty:
+                return float(hist_sub['Close'].iloc[0])
+        return float(hist['Close'].iloc[-1])
+    except Exception:
+        return 1.0
+
 def get_portfolio_hu_top3():
     items = []
     try:
@@ -82,13 +102,13 @@ def get_portfolio_hu_top3():
         return "<p><i>A Portfolio.hu tőzsdei hírei jelenleg nem érhetőek el.</i></p>"
 
 def get_stock_trends_and_news():
-    html = "<h3>Tőzsdei Portfólió Trendek & BTD Teljesítmény</h3>"
+    html = "<h3>Tőzsdei Portfólió Trendek, BTD & HUF Nettó Balansz</h3>"
     
     if len(PORTFOLIO) < EXPECTED_COUNT:
         html += f"<p style='color:red;'><b>Figyelem:</b> A beállított portfólióban csak {len(PORTFOLIO)} eszköz szerepel a várt {EXPECTED_COUNT} helyett!</p>"
 
     html += "<table border='1' cellpadding='5' style='border-collapse:collapse; width:100%;'>"
-    html += "<tr style='background-color:#f2f2f2;'><th>Eszköz</th><th>Vásárlás dátuma</th><th>Ár</th><th>Napi %</th><th>Heti %</th><th>Havi %</th><th>BTD % (Vásárlás óta)</th></tr>"
+    html += "<tr style='background-color:#f2f2f2;'><th>Eszköz</th><th>Vásárlás dátuma</th><th>Ár</th><th>Napi %</th><th>Heti %</th><th>Havi %</th><th>Devizás BTD %</th><th>HUF BTD % (Devizakorrigált)</th></tr>"
     
     for name, data in PORTFOLIO.items():
         try:
@@ -99,27 +119,45 @@ def get_stock_trends_and_news():
             hist = ticker.history(period="1y")
 
             if not hist.empty and len(hist) >= 2:
-                current_price = hist['Close'].iloc[-1]
+                current_price = float(hist['Close'].iloc[-1])
                 daily_change = ((current_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
                 
+                # Devizanem meghatározása (alapértelmezett USD, ha .BU = HUF, .TO = CAD, .AS = EUR)
+                currency = "USD"
+                if ticker_symbol.endswith(".BU"):
+                    currency = "HUF"
+                elif ticker_symbol.endswith(".TO"):
+                    currency = "CAD"
+                elif ticker_symbol.endswith(".AS"):
+                    currency = "EUR"
+
                 hist_buy = hist[hist.index.astype(str) >= buy_date]
                 if not hist_buy.empty:
-                    buy_price = hist_buy['Close'].iloc[0]
+                    buy_price = float(hist_buy['Close'].iloc[0])
                     btd_change = ((current_price - buy_price) / buy_price) * 100
                 else:
+                    buy_price = current_price
                     btd_change = daily_change
+
+                # HUF devizakorrigált BTD % számítása
+                buy_fx = get_fx_rate(currency, buy_date)
+                current_fx = get_fx_rate(currency)
+                
+                buy_price_huf = buy_price * buy_fx
+                current_price_huf = current_price * current_fx
+                huf_btd_change = ((current_price_huf - buy_price_huf) / buy_price_huf) * 100
 
                 def fmt(val):
                     color = "green" if val >= 0 else "red"
                     return f"<span style='color:{color};'>{val:+.2f}%</span>"
 
-                html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td>{current_price:.2f}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(btd_change)}</b></td></tr>"
+                html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td>{current_price:.2f} {currency}</td><td>{fmt(daily_change)}</td><td>{fmt(weekly_change)}</td><td>{fmt(monthly_change)}</td><td><b>{fmt(btd_change)}</b></td><td><b>{fmt(huf_btd_change)}</b></td></tr>"
             else:
-                html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td colspan='5'><i>Adatfrissítés alatt</i></td></tr>"
+                html += f"<tr><td><b>{name}</b></td><td>{buy_date}</td><td colspan='6'><i>Adatfrissítés alatt</i></td></tr>"
         except Exception:
-            html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='5'><i>Hiba az adatlekérésnél</i></td></tr>"
+            html += f"<tr><td><b>{name}</b></td><td>{data.get('buy_date','-')}</td><td colspan='6'><i>Hiba az adatlekérésnél</i></td></tr>"
 
     html += "</table>"
     html += get_portfolio_hu_top3()
@@ -150,17 +188,26 @@ def fetch_feed_safe(url):
     except Exception:
         return feedparser.parse(url)
 
+def is_hungarian_text(text):
+    """Kizárólag magyar cikkek átengedése (angol szavak és karakterek kiszűrése)"""
+    english_stopwords = [" the ", " in ", " of ", " for ", " and ", " to ", " with ", " on ", " at "]
+    text_lower = f" {text.lower()} "
+    if any(stop in text_lower for stop in english_stopwords):
+        return False
+    return True
+
 def get_categorized_news():
     all_articles = []
     for source_name, feed_url in NEWS_FEEDS.items():
         try:
             feed = fetch_feed_safe(feed_url)
             for entry in feed.entries:
-                all_articles.append({
-                    "source": source_name,
-                    "title": entry.title,
-                    "link": entry.link
-                })
+                if is_hungarian_text(entry.title):
+                    all_articles.append({
+                        "source": source_name,
+                        "title": entry.title,
+                        "link": entry.link
+                    })
         except Exception:
             continue
 
@@ -195,21 +242,21 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
-    # Dedikált Sport gyűjtő kifejezetten KONKRÉT cikk-link szűréssel
+    # Dedikált Sport gyűjtő - Kizárólag magyar nyelvű cikkek
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
             feed = fetch_feed_safe(feed_url)
             for entry in feed.entries:
-                sport_articles.append({
-                    "source": source_name,
-                    "title": entry.title,
-                    "link": entry.link
-                })
+                if is_hungarian_text(entry.title):
+                    sport_articles.append({
+                        "source": source_name,
+                        "title": entry.title,
+                        "link": entry.link
+                    })
         except Exception:
             continue
 
-    # Ha az RSS nem adna konkrét cikket, a Nemzeti Sport főoldaláról szedjük ki KIZÁRÓLAG A KONKRÉT CIKKEKET
     if len(sport_articles) < 5:
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
@@ -218,14 +265,14 @@ def get_categorized_news():
             for a_tag in soup.find_all('a', href=True):
                 href = a_tag['href']
                 title = a_tag.text.strip()
-                # Kiszűrjük a rovatneveket és menüpontokat: csak valódi cikk-URL jöhet szóba
                 if len(title) > 30 and ("202" in href or ".html" in href or "/cikk/" in href or "/labdarugas/" in href or "/f1/" in href):
-                    full_link = href if href.startswith("http") else "https://www.nemzetisport.hu" + href
-                    sport_articles.append({
-                        "source": "Nemzeti Sport",
-                        "title": title,
-                        "link": full_link
-                    })
+                    if is_hungarian_text(title):
+                        full_link = href if href.startswith("http") else "https://www.nemzetisport.hu" + href
+                        sport_articles.append({
+                            "source": "Nemzeti Sport",
+                            "title": title,
+                            "link": full_link
+                        })
                 if len(sport_articles) >= 15:
                     break
         except Exception:
@@ -234,7 +281,6 @@ def get_categorized_news():
     sport_matches = []
     sport_links = set()
 
-    # 1. Kör: Kiemelt kulcsszavas konkrét cikkek
     for article in sport_articles:
         title_lower = article["title"].lower()
         if any(kw in title_lower for kw in SPORT_KEYWORDS):
@@ -244,7 +290,6 @@ def get_categorized_news():
         if len(sport_matches) >= 5:
             break
 
-    # 2. Kör: Ha nincs meg az 5 kulcsszavas cikk, feltöltjük a legfrissebb konkrét sporthírekkel
     if len(sport_matches) < 5:
         for article in sport_articles:
             if article["link"] not in sport_links:
