@@ -2,7 +2,8 @@ name: Napi Automatikus Hírgyűjtő
 
 on:
   schedule:
-    - cron: '35 2 * * *'
+    # UTC 02:15 = Magyar idő szerint 04:15 (Nyáron / CEST)
+    - cron: '15 2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -20,7 +21,7 @@ jobs:
       - name: Szükséges könyvtárak telepítése
         run: |
           python -m pip install --upgrade pip
-          pip install feedparser requests yfinance beautifulsoup4
+          pip install feedparser requests yfinance beautifulsoup4 lxml
 
       - name: Python szkript futtatása
         env:
