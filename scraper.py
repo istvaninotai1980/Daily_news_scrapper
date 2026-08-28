@@ -10,6 +10,7 @@ from email.mime.multipart import MIMEMultipart
 
 # --- CONFIG: RÉSZVÉNYEK, ETF-EK & VÁSÁRLÁSI DÁTUMOK (BTD) ---
 PORTFOLIO = {
+    "Broadcom (AVGO)": {"ticker": "AVGO", "buy_date": "2026-08-28"},
     "Nvidia IBIS (NVD)": {"ticker": "NVDA.DE", "buy_date": "2026-08-28"},
     "Amazon (AMZ)": {"ticker": "AMZN", "buy_date": "2026-07-29"},
     "TSMC (TSM)": {"ticker": "TSM", "buy_date": "2026-07-28"},
@@ -24,7 +25,7 @@ PORTFOLIO = {
     "S&P 500 ETF (VUSA)": {"ticker": "VOO", "buy_date": "2026-01-15"}
 }
 
-EXPECTED_COUNT = 12
+EXPECTED_COUNT = 13
 
 NEWS_FEEDS = {
     "Telex": "https://telex.hu/rss",
@@ -126,7 +127,7 @@ def get_stock_trends_and_news():
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
                 
-                # Devizanem meghatározása (NVDA.DE / .AS = EUR, .BU = HUF, .TO = CAD, egyéb = USD)
+                # Devizanem meghatározása (AVGO = USD, NVDA.DE / .AS = EUR, .BU = HUF, .TO = CAD)
                 currency = "USD"
                 if ticker_symbol.endswith(".BU"):
                     currency = "HUF"
@@ -143,7 +144,7 @@ def get_stock_trends_and_news():
                     buy_price = current_price
                     btd_change = daily_change
 
-                # HUF devizakorrigált BTD % számítása (Vásárlási ár * Akkor FX vs Jelenlegi ár * Mai FX)
+                # HUF devizakorrigált BTD % számítása
                 buy_fx = get_fx_rate(currency, buy_date)
                 current_fx = get_fx_rate(currency)
                 
