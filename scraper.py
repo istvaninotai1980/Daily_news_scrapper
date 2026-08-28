@@ -8,7 +8,9 @@ from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+# --- CONFIG: RÉSZVÉNYEK, ETF-EK & VÁSÁRLÁSI DÁTUMOK (BTD) ---
 PORTFOLIO = {
+    "Nvidia IBIS (NVD)": {"ticker": "NVDA.DE", "buy_date": "2026-08-28"},
     "Amazon (AMZ)": {"ticker": "AMZN", "buy_date": "2026-07-29"},
     "TSMC (TSM)": {"ticker": "TSM", "buy_date": "2026-07-28"},
     "Microsoft (MSF)": {"ticker": "MSFT", "buy_date": "2026-04-16"},
@@ -22,7 +24,7 @@ PORTFOLIO = {
     "S&P 500 ETF (VUSA)": {"ticker": "VOO", "buy_date": "2026-01-15"}
 }
 
-EXPECTED_COUNT = 11
+EXPECTED_COUNT = 12
 
 NEWS_FEEDS = {
     "Telex": "https://telex.hu/rss",
@@ -124,13 +126,13 @@ def get_stock_trends_and_news():
                 weekly_change = ((current_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0
                 monthly_change = ((current_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else 0
                 
-                # Devizanem meghatározása (alapértelmezett USD, ha .BU = HUF, .TO = CAD, .AS = EUR)
+                # Devizanem meghatározása (NVDA.DE / .AS = EUR, .BU = HUF, .TO = CAD, egyéb = USD)
                 currency = "USD"
                 if ticker_symbol.endswith(".BU"):
                     currency = "HUF"
                 elif ticker_symbol.endswith(".TO"):
                     currency = "CAD"
-                elif ticker_symbol.endswith(".AS"):
+                elif ticker_symbol.endswith(".AS") or ticker_symbol.endswith(".DE"):
                     currency = "EUR"
 
                 hist_buy = hist[hist.index.astype(str) >= buy_date]
@@ -141,7 +143,7 @@ def get_stock_trends_and_news():
                     buy_price = current_price
                     btd_change = daily_change
 
-                # HUF devizakorrigált BTD % számítása
+                # HUF devizakorrigált BTD % számítása (Vásárlási ár * Akkor FX vs Jelenlegi ár * Mai FX)
                 buy_fx = get_fx_rate(currency, buy_date)
                 current_fx = get_fx_rate(currency)
                 
@@ -189,7 +191,6 @@ def fetch_feed_safe(url):
         return feedparser.parse(url)
 
 def is_hungarian_text(text):
-    """Kizárólag magyar cikkek átengedése (angol szavak és karakterek kiszűrése)"""
     english_stopwords = [" the ", " in ", " of ", " for ", " and ", " to ", " with ", " on ", " at "]
     text_lower = f" {text.lower()} "
     if any(stop in text_lower for stop in english_stopwords):
@@ -242,7 +243,6 @@ def get_categorized_news():
         else:
             html += "<p><i>Nincs friss hír ebben a témában.</i></p>"
 
-    # Dedikált Sport gyűjtő - Kizárólag magyar nyelvű cikkek
     sport_articles = []
     for source_name, feed_url in SPORT_FEEDS.items():
         try:
