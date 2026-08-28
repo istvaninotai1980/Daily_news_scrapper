@@ -2,8 +2,8 @@ name: Napi Automatikus Hírgyűjtő
 
 on:
   schedule:
-    # UTC 02:15 = Magyar idő szerint 04:15 (Nyáron / CEST)
-    - cron: '15 2 * * *'
+    # UTC 02:18 = Magyar idő szerint 04:18 (CEST)
+    - cron: '18 2 * * *'
   workflow_dispatch:
 
 jobs:
