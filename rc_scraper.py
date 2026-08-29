@@ -9,7 +9,7 @@ from email.mime.multipart import MIMEMultipart
 # --- CONFIG ---
 URL = "https://www.rc-network.de/forums/biete-flugmodelle.132/"
 KEYWORDS = ["ccm toy", "toy", "f5d", "fw", "funcub", "funcup", "pilatus"]
-LAST_SEEN_FILE = "last_seen_id.txt"
+SEEN_IDS_FILE = "seen_ids.txt"
 
 def extract_thread_id(href):
     """Kinyeri a tiszta numerikus ID-t a XenForo URL-ből (pl. .12133992/ -> 12133992)"""
@@ -43,19 +43,20 @@ def get_forum_threads():
                 threads.append({'id': thread_id, 'title': thread_title, 'url': thread_url})
     return threads
 
-def load_last_seen():
-    if os.path.exists(LAST_SEEN_FILE):
+def load_seen_ids():
+    if os.path.exists(SEEN_IDS_FILE):
         try:
-            with open(LAST_SEEN_FILE, 'r') as f:
-                return f.read().strip()
+            with open(SEEN_IDS_FILE, 'r') as f:
+                return set(line.strip() for line in f if line.strip())
         except Exception:
-            return ""
-    return ""
+            return set()
+    return set()
 
-def save_last_seen(thread_id):
+def save_seen_ids(seen_ids):
     try:
-        with open(LAST_SEEN_FILE, 'w') as f:
-            f.write(str(thread_id))
+        with open(SEEN_IDS_FILE, 'w') as f:
+            for thread_id in seen_ids:
+                f.write(f"{thread_id}\n")
     except Exception as e:
         print(f"Hiba a mentésnél: {e}")
 
@@ -68,7 +69,7 @@ def send_alert(matches):
         return
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🚨 RC-Network HIRDETÉS RIASZTÁS: {matches[0]['title']}"
+    msg["Subject"] = f"🚨 RC-Network HIRDETÉS RIASZTÁS ({len(matches)} új találat)"
     msg["From"] = sender
     msg["To"] = receiver
 
@@ -78,7 +79,7 @@ def send_alert(matches):
     <html>
       <body style="font-family: Arial, sans-serif;">
         <h2 style="color: #d9534f;">Új találat az RC-Network apróhirdetések között!</h2>
-        <p>A(z) <b>{', '.join(KEYWORDS)}</b> kulcsszavak alapján az alábbi új hirdetés megjelent:</p>
+        <p>A(z) <b>{', '.join(KEYWORDS)}</b> kulcsszavak alapján az alábbi új hirdetés(ek) jelentek meg:</p>
         <ul>
           {items_html}
         </ul>
@@ -97,25 +98,25 @@ if __name__ == "__main__":
         if not threads:
             exit()
 
-        last_seen = load_last_seen()
-        latest_id = threads[0]['id']
+        seen_ids = load_seen_ids()
         keywords_lower = [kw.lower() for kw in KEYWORDS]
+        new_matches = []
 
-        # Ha van újabb hirdetés a legutoljára mentetthez képest
-        if last_seen != latest_id:
-            matches = []
-            for thread in threads:
-                if thread['id'] == last_seen:
-                    break
-                
-                title_lower = thread['title'].lower()
-                if any(kw in title_lower for kw in keywords_lower):
-                    matches.append(thread)
+        # Végigmegyünk az 1. oldal összes hirdetésén
+        for thread in threads:
+            thread_id = thread['id']
+            title_lower = thread['title'].lower()
 
-            if matches:
-                send_alert(matches)
-            
-            save_last_seen(latest_id)
+            # Ha illeszkedik a kulcsszóra és MÉG NEM KÜLDTEK RÁ RIASZTÁST
+            if any(kw in title_lower for kw in keywords_lower):
+                if thread_id not in seen_ids:
+                    new_matches.append(thread)
+                    seen_ids.add(thread_id)
+
+        # Ha találtunk új hirdetést, elküldjük és frissítjük a megtekintett ID-k listáját
+        if new_matches:
+            send_alert(new_matches)
+            save_seen_ids(seen_ids)
 
     except Exception as e:
         print(f"Hiba az ellenőrzés során: {e}")
