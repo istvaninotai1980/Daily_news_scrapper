@@ -7,7 +7,7 @@ from email.mime.multipart import MIMEMultipart
 
 # --- CONFIG ---
 URL = "https://www.rc-network.de/forums/biete-flugmodelle.132/"
-KEYWORDS = ["ccm toy", "toy", "F5D", "FW", "Funcub", "Funcup"]
+KEYWORDS = ["ccm toy", "toy", "F5D", "FW", "Funcub", "Funcup", "pilatus"]
 LAST_SEEN_FILE = "last_seen_id.txt"
 
 def get_forum_threads():
