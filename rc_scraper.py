@@ -102,18 +102,16 @@ if __name__ == "__main__":
         keywords_lower = [kw.lower() for kw in KEYWORDS]
         new_matches = []
 
-        # Végigmegyünk az 1. oldal összes hirdetésén
         for thread in threads:
             thread_id = thread['id']
             title_lower = thread['title'].lower()
 
-            # Ha illeszkedik a kulcsszóra és MÉG NEM KÜLDTEK RÁ RIASZTÁST
+            # Szóhatár/szórészlet illesztés az ASG, FW, Toy gépekre
             if any(kw in title_lower for kw in keywords_lower):
                 if thread_id not in seen_ids:
                     new_matches.append(thread)
                     seen_ids.add(thread_id)
 
-        # Ha találtunk új hirdetést, elküldjük és frissítjük a megtekintett ID-k listáját
         if new_matches:
             send_alert(new_matches)
             save_seen_ids(seen_ids)
