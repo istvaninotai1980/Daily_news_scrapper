@@ -9,7 +9,6 @@ from email.mime.multipart import MIMEMultipart
 # --- CONFIG ---
 URL = "https://www.rc-network.de/forums/biete-flugmodelle.132/"
 KEYWORDS = ["ccm toy", "toy", "f5d", "fw", "funcub", "funcup", "pilatus", "asg"]
-SEEN_IDS_FILE = "seen_ids.txt"
 
 def extract_thread_id(href):
     """Kinyeri a tiszta numerikus ID-t a XenForo URL-ből (pl. .12133992/ -> 12133992)"""
@@ -43,23 +42,6 @@ def get_forum_threads():
                 threads.append({'id': thread_id, 'title': thread_title, 'url': thread_url})
     return threads
 
-def load_seen_ids():
-    if os.path.exists(SEEN_IDS_FILE):
-        try:
-            with open(SEEN_IDS_FILE, 'r') as f:
-                return set(line.strip() for line in f if line.strip())
-        except Exception:
-            return set()
-    return set()
-
-def save_seen_ids(seen_ids):
-    try:
-        with open(SEEN_IDS_FILE, 'w') as f:
-            for thread_id in seen_ids:
-                f.write(f"{thread_id}\n")
-    except Exception as e:
-        print(f"Hiba a mentésnél: {e}")
-
 def send_alert(matches):
     sender = os.environ.get("SENDER_EMAIL")
     password = os.environ.get("SENDER_PASSWORD")
@@ -69,7 +51,7 @@ def send_alert(matches):
         return
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🚨 RC-Network HIRDETÉS RIASZTÁS ({len(matches)} új találat)"
+    msg["Subject"] = f"🚨 RC-Network HIRDETÉS RIASZTÁS ({len(matches)} találat az 1. oldalon)"
     msg["From"] = sender
     msg["To"] = receiver
 
@@ -78,8 +60,8 @@ def send_alert(matches):
     html = f"""
     <html>
       <body style="font-family: Arial, sans-serif;">
-        <h2 style="color: #d9534f;">Új találat az RC-Network apróhirdetések között!</h2>
-        <p>A(z) <b>{', '.join(KEYWORDS)}</b> kulcsszavak alapján az alábbi új hirdetés(ek) jelentek meg:</p>
+        <h2 style="color: #d9534f;">Aktuális találatok az RC-Network apróhirdetések között!</h2>
+        <p>A(z) <b>{', '.join(KEYWORDS)}</b> kulcsszavak alapján az alábbi hirdetés(ek) szerepelnek a fórum 1. oldalán:</p>
         <ul>
           {items_html}
         </ul>
@@ -98,23 +80,18 @@ if __name__ == "__main__":
         if not threads:
             exit()
 
-        seen_ids = load_seen_ids()
         keywords_lower = [kw.lower() for kw in KEYWORDS]
-        new_matches = []
+        matches = []
 
+        # Végigmegyünk az 1. oldal összes hirdetésén, és kigyűjtjük az összes találatot
         for thread in threads:
-            thread_id = thread['id']
             title_lower = thread['title'].lower()
-
-            # Szóhatár/szórészlet illesztés az ASG, FW, Toy gépekre
             if any(kw in title_lower for kw in keywords_lower):
-                if thread_id not in seen_ids:
-                    new_matches.append(thread)
-                    seen_ids.add(thread_id)
+                matches.append(thread)
 
-        if new_matches:
-            send_alert(new_matches)
-            save_seen_ids(seen_ids)
+        # Ha van legalább egy meccselő hirdetés a címlapon, elküldjük a levelet
+        if matches:
+            send_alert(matches)
 
     except Exception as e:
         print(f"Hiba az ellenőrzés során: {e}")
