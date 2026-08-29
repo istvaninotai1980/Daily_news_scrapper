@@ -8,7 +8,7 @@ from email.mime.multipart import MIMEMultipart
 
 # --- CONFIG ---
 URL = "https://www.rc-network.de/forums/biete-flugmodelle.132/"
-KEYWORDS = ["ccm toy", "toy", "f5d", "fw", "funcub", "funcup", "pilatus"]
+KEYWORDS = ["ccm toy", "toy", "f5d", "fw", "funcub", "funcup", "pilatus","asg"]
 SEEN_IDS_FILE = "seen_ids.txt"
 
 def extract_thread_id(href):
