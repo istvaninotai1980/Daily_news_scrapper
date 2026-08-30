@@ -8,7 +8,7 @@ import os
 # Pontos repülőgép adok-veszek fórum URL (.132)
 BASE_URL = "https://www.rc-network.de/forums/biete-flugmodelle.132/"
 PAGES_TO_SCRAPE = 6
-KEYWORDS = ["toy", "fw", "pilatus", "asg"]
+KEYWORDS = ["toy", "fw", "f5d", "funcub", "funcup", "hotliner"]
 SEEN_FILE = "seen_urls.txt"
 
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
