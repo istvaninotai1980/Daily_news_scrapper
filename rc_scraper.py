@@ -1,71 +1,76 @@
-import requests
+ import requests
 from bs4 import BeautifulSoup
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 
-# --- BEÁLLÍTÁSOK ---
 BASE_URL = "https://www.rc-network.de/forums/biete-flugmodelle.62/"
-PAGES_TO_SCRAPE = 6  # Az első 6 oldal átfésülése
-
-# Kulcsszavak (kisbetűsítve a pontos egyezéshez)
+PAGES_TO_SCRAPE = 6
 KEYWORDS = ["toy", "fw", "pilatus", "asg"]
+SEEN_FILE = "seen_urls.txt"
 
-# E-mail beállítások (GitHub Secrets-ből)
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
+def load_seen_urls():
+    if os.path.exists(SEEN_FILE):
+        with open(SEEN_FILE, "r", encoding="utf-8") as f:
+            return set(line.strip() for line in f if line.strip())
+    return set()
+
+def save_seen_urls(urls):
+    with open(SEEN_FILE, "a", encoding="utf-8") as f:
+        for url in urls:
+            f.write(f"{url}\n")
+
 def fetch_and_parse():
-    found_items = []
-    seen_urls = set()  # Duplikációk kiszűrésére
-    
+    seen_urls = load_seen_urls()
+    new_items = []
+    current_run_urls = set()
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     }
 
-    # Első 6 oldal bejárása (page-1, page-2, ...)
     for page in range(1, PAGES_TO_SCRAPE + 1):
         url = BASE_URL if page == 1 else f"{BASE_URL}page-{page}"
-        print(f"Oldal feldolgozása: {url}")
-        
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
-            print(f"Hiba az oldal letöltésekor ({page}. oldal): {response.status_code}")
             continue
 
         soup = BeautifulSoup(response.text, "html.parser")
-        threads = soup.find_all("div", class_="structItem-title")
+        
+        # Kizárólag a tényleges hirdetési témák soraiból nyerjük ki a linkeket
+        thread_items = soup.select("div.structItem--thread div.structItem-title a[data-tp-primary='on']")
 
-        for thread in threads:
-            link_tag = thread.find("a", href=True)
-            if link_tag:
-                title = link_tag.text.strip()
-                full_url = "https://www.rc-network.de" + link_tag['href']
-                
-                # Ellenőrizzük, hogy láttuk-e már ezt a hirdetést
-                if full_url in seen_urls:
-                    continue
+        for link_tag in thread_items:
+            title = link_tag.text.strip()
+            full_url = "https://www.rc-network.de" + link_tag['href']
 
-                # Keresés a kulcsszavak között
-                title_lower = title.lower()
-                for kw in KEYWORDS:
-                    if kw in title_lower:
-                        found_items.append((title, full_url))
-                        seen_urls.add(full_url)  # Elmentjük, hogy többször ne kerüljön be
-                        break
+            # Tisztított URL (kikerüljük a lapozási paramétereket a link végéről)
+            clean_url = full_url.split('/unread')[0].split('/page-')[0]
 
-    return found_items
+            if clean_url in seen_urls or clean_url in current_run_urls:
+                continue
+
+            title_lower = title.lower()
+            for kw in KEYWORDS:
+                if kw in title_lower:
+                    new_items.append((title, clean_url))
+                    current_run_urls.add(clean_url)
+                    break
+
+    return new_items, current_run_urls
 
 def send_email(items):
     if not items:
-        print("Nincs új találat, e-mail nem kerül kiküldésre.")
+        print("Nincs új hirdetés.")
         return
 
-    subject = f"RC-Network Riasztás: {len(items)} találat az első {PAGES_TO_SCRAPE} oldalon"
-    
-    body = f"A következő hirdetéseket találtam a megadott kulcsszavak alapján (Toy, FW, Pilatus, ASG):\n\n"
+    subject = f"RC-Network: {len(items)} új hirdetés található"
+    body = "Új hirdetések a megadott kulcsszavak alapján:\n\n"
     for title, url in items:
         body += f"• {title}\n  Link: {url}\n\n"
 
@@ -81,10 +86,12 @@ def send_email(items):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
-        print("E-mail sikeresen elküldve!")
+        print("E-mail elküldve.")
     except Exception as e:
-        print(f"Hiba az e-mail küldése során: {e}")
+        print(f"Hiba az e-mail küldésekor: {e}")
 
 if __name__ == "__main__":
-    matches = fetch_and_parse()
-    send_email(matches)
+    matches, new_urls = fetch_and_parse()
+    if matches:
+        send_email(matches)
+        save_seen_urls(new_urls)
