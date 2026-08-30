@@ -16,14 +16,20 @@ RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
 def load_seen_urls():
     if os.path.exists(SEEN_FILE):
-        with open(SEEN_FILE, "r", encoding="utf-8") as f:
-            return set(line.strip() for line in f if line.strip())
+        try:
+            with open(SEEN_FILE, "r", encoding="utf-8") as f:
+                return set(line.strip() for line in f if line.strip())
+        except Exception as e:
+            print(f"Hiba a seen_urls olvasásakor: {e}")
     return set()
 
 def save_seen_urls(urls):
-    with open(SEEN_FILE, "a", encoding="utf-8") as f:
-        for url in urls:
-            f.write(f"{url}\n")
+    try:
+        with open(SEEN_FILE, "a", encoding="utf-8") as f:
+            for url in urls:
+                f.write(f"{url}\n")
+    except Exception as e:
+        print(f"Hiba a seen_urls mentésekor: {e}")
 
 def fetch_and_parse():
     seen_urls = load_seen_urls()
@@ -36,31 +42,33 @@ def fetch_and_parse():
 
     for page in range(1, PAGES_TO_SCRAPE + 1):
         url = BASE_URL if page == 1 else f"{BASE_URL}page-{page}"
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            continue
-
-        soup = BeautifulSoup(response.text, "html.parser")
+        print(f"Oldal feldolgozása: {url}")
         
-        # Kizárólag a tényleges hirdetési témák soraiból nyerjük ki a linkeket
-        thread_items = soup.select("div.structItem--thread div.structItem-title a[data-tp-primary='on']")
-
-        for link_tag in thread_items:
-            title = link_tag.text.strip()
-            full_url = "https://www.rc-network.de" + link_tag['href']
-
-            # Tisztított URL (kikerüljük a lapozási paramétereket a link végéről)
-            clean_url = full_url.split('/unread')[0].split('/page-')[0]
-
-            if clean_url in seen_urls or clean_url in current_run_urls:
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code != 200:
+                print(f"Hiba az oldal letöltésekor ({page}. oldal): {response.status_code}")
                 continue
 
-            title_lower = title.lower()
-            for kw in KEYWORDS:
-                if kw in title_lower:
-                    new_items.append((title, clean_url))
-                    current_run_urls.add(clean_url)
-                    break
+            soup = BeautifulSoup(response.text, "html.parser")
+            thread_items = soup.select("div.structItem--thread div.structItem-title a[data-tp-primary='on']")
+
+            for link_tag in thread_items:
+                title = link_tag.text.strip()
+                full_url = "https://www.rc-network.de" + link_tag['href']
+                clean_url = full_url.split('/unread')[0].split('/page-')[0]
+
+                if clean_url in seen_urls or clean_url in current_run_urls:
+                    continue
+
+                title_lower = title.lower()
+                for kw in KEYWORDS:
+                    if kw in title_lower:
+                        new_items.append((title, clean_url))
+                        current_run_urls.add(clean_url)
+                        break
+        except Exception as e:
+            print(f"Hiba a(z) {page}. oldal feldolgozása során: {e}")
 
     return new_items, current_run_urls
 
@@ -69,8 +77,8 @@ def send_email(items):
         print("Nincs új hirdetés.")
         return
 
-    subject = f"RC-Network: {len(items)} új hirdetés található"
-    body = "Új hirdetések a megadott kulcsszavak alapján:\n\n"
+    subject = f"RC-Network: {len(items)} új hirdetés"
+    body = "Új hirdetések a megadott kulcsszavak alapján (Toy, FW, Pilatus, ASG):\n\n"
     for title, url in items:
         body += f"• {title}\n  Link: {url}\n\n"
 
@@ -86,7 +94,7 @@ def send_email(items):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
-        print("E-mail elküldve.")
+        print("E-mail sikeresen elküldve!")
     except Exception as e:
         print(f"Hiba az e-mail küldésekor: {e}")
 
