@@ -5,7 +5,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 
-BASE_URL = "https://www.rc-network.de/forums/biete-flugmodelle.62/"
+# Pontos repülőgép adok-veszek fórum URL (.132)
+BASE_URL = "https://www.rc-network.de/forums/biete-flugmodelle.132/"
 PAGES_TO_SCRAPE = 6
 KEYWORDS = ["toy", "fw", "pilatus", "asg"]
 SEEN_FILE = "seen_urls.txt"
@@ -51,6 +52,7 @@ def fetch_and_parse():
                 continue
 
             soup = BeautifulSoup(response.text, "html.parser")
+            # Kizárólag a hirdetések címeit és elsődleges linkjeit gyűjtjük ki
             thread_items = soup.select("div.structItem--thread div.structItem-title a[data-tp-primary='on']")
 
             for link_tag in thread_items:
@@ -77,8 +79,8 @@ def send_email(items):
         print("Nincs új hirdetés.")
         return
 
-    subject = f"RC-Network: {len(items)} új hirdetés"
-    body = "Új hirdetések a megadott kulcsszavak alapján (Toy, FW, Pilatus, ASG):\n\n"
+    subject = f"RC-Network: {len(items)} új repülőgép hirdetés"
+    body = "Új hirdetések a Biete Flugmodelle (.132) fórumból:\n\n"
     for title, url in items:
         body += f"• {title}\n  Link: {url}\n\n"
 
