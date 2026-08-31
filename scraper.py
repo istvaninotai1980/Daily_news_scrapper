@@ -17,7 +17,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# --- PORTFÓLIÓ ESZKÖZÖK (IBKR TBSZ-2025) ---
+# --- PORTFÓLIÓ ESZKÖZÖK (JÁVÍTOTT STABIL SZIMBÓLUMOK) ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbol": "AVGO", "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbol": "NVD.DE", "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -25,13 +25,13 @@ PORTFOLIO = [
     {"name": "TSMC (TSM)", "symbol": "TSM", "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28"},
     {"name": "Microsoft (MSF)", "symbol": "MSFT", "pos": 1.4114, "currency": "USD", "buy_date": "2026-04-16"},
     {"name": "OTP Bank (OTP)", "symbol": "OTP.BD", "pos": 2.0, "currency": "HUF", "buy_date": "2026-03-06"},
-    {"name": "Physical Silver (ISLN)", "symbol": "ISLN.L", "pos": 3.7478, "currency": "USD", "buy_date": "2026-03-06"},
+    {"name": "Physical Silver (ISLN)", "symbol": "SSLV.DE", "pos": 3.7478, "currency": "EUR", "buy_date": "2026-03-06"},
     {"name": "Constellation Software (CSU)", "symbol": "CSU.TO", "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28"},
-    {"name": "Defence ETF (ARMY)", "symbol": "ARMY.L", "pos": 46.0, "currency": "USD", "buy_date": "2026-01-19"},
+    {"name": "Defence ETF (ARMY)", "symbol": "ARMY.DE", "pos": 46.0, "currency": "EUR", "buy_date": "2026-01-19"},
     {"name": "S&P 500 Info Tech (QDV5)", "symbol": "QDV5.DE", "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19"},
-    {"name": "Copper ETF (COPG)", "symbol": "COPG.L", "pos": 9.548, "currency": "USD", "buy_date": "2026-01-19"},
-    {"name": "Global Growth ETF (GGRW)", "symbol": "GGRW.L", "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15"},
-    {"name": "S&P 500 ETF (VUSA)", "symbol": "VUSA.L", "pos": 4.5854, "currency": "USD", "buy_date": "2026-01-15"}
+    {"name": "Copper ETF (COPG)", "symbol": "COPP.DE", "pos": 9.548, "currency": "EUR", "buy_date": "2026-01-19"},
+    {"name": "Global Growth ETF (GGRW)", "symbol": "GGRA.DE", "pos": 15.0924, "currency": "EUR", "buy_date": "2026-01-15"},
+    {"name": "S&P 500 ETF (VUSA)", "symbol": "VUSA.DE", "pos": 4.5854, "currency": "EUR", "buy_date": "2026-01-15"}
 ]
 
 def format_pct(val):
@@ -63,19 +63,9 @@ def build_portfolio_table():
         try:
             ticker = yf.Ticker(item["symbol"])
             hist = ticker.history(period="1y")
-            
-            if hist.empty or len(hist) < 2:
-                # Fallback szimbólum próbálkozás
-                alt_symbol = item["symbol"].replace(".L", ".DE")
-                ticker = yf.Ticker(alt_symbol)
-                hist = ticker.history(period="1y")
 
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
-                
-                # Londoni penny / dollár korrekció
-                if item["symbol"].endswith(".L") and curr_price > 1000 and item["currency"] == "USD":
-                    curr_price = curr_price / 100.0
 
                 daily_pct = ((curr_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
                 weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
@@ -85,8 +75,6 @@ def build_portfolio_table():
                 hist_btd = hist.loc[hist.index >= item["buy_date"]]
                 if not hist_btd.empty:
                     buy_price = hist_btd['Close'].iloc[0]
-                    if item["symbol"].endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
-                        buy_price = buy_price / 100.0
                     dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100
                 else:
                     buy_price = curr_price
