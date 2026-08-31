@@ -17,7 +17,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# --- PORTFÓLIÓ ESZKÖZÖK (IBKR TBSZ-2025 PONTOS ADATOK ALAPJÁN) ---
+# --- PORTFÓLIÓ ESZKÖZÖK (IBKR TBSZ-2025) ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbol": "AVGO", "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbol": "NVD.DE", "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -43,17 +43,16 @@ def format_pct(val):
 
 def get_fx_pair(currency):
     if currency == 'HUF':
-        return 1.0, 1.0
+        return 1.0, None
     symbol_map = {'USD': 'USDHUF=X', 'EUR': 'EURHUF=X', 'CAD': 'CADHUF=X'}
     fx_symbol = symbol_map.get(currency)
     if not fx_symbol:
-        return 1.0, 1.0
+        return 1.0, None
     try:
         fx = yf.Ticker(fx_symbol)
         hist = fx.history(period="1y")
         if not hist.empty:
-            curr_fx = hist['Close'].iloc[-1]
-            return curr_fx, hist
+            return hist['Close'].iloc[-1], hist
     except Exception as e:
         print(f"FX Error ({currency}): {e}")
     return 1.0, None
@@ -63,8 +62,14 @@ def build_portfolio_table():
     for item in PORTFOLIO:
         try:
             ticker = yf.Ticker(item["symbol"])
-            hist = ticker.history(period="3mo")
+            hist = ticker.history(period="1y")
             
+            if hist.empty or len(hist) < 2:
+                # Fallback szimbólum próbálkozás
+                alt_symbol = item["symbol"].replace(".L", ".DE")
+                ticker = yf.Ticker(alt_symbol)
+                hist = ticker.history(period="1y")
+
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
                 
@@ -73,11 +78,11 @@ def build_portfolio_table():
                     curr_price = curr_price / 100.0
 
                 daily_pct = ((curr_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
-                weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0.0
-                monthly_pct = ((curr_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100
+                weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
+                monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
                 
                 # Devizás BTD
-                hist_btd = ticker.history(start=item["buy_date"])
+                hist_btd = hist.loc[hist.index >= item["buy_date"]]
                 if not hist_btd.empty:
                     buy_price = hist_btd['Close'].iloc[0]
                     if item["symbol"].endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
@@ -87,10 +92,9 @@ def build_portfolio_table():
                     buy_price = curr_price
                     dev_btd_pct = monthly_pct
 
-                # Tényleges HUF BTD kiszámítása az FX árfolyam-ingadozással
+                # Tényleges HUF BTD kiszámítása
                 curr_fx, fx_hist = get_fx_pair(item["currency"])
                 if fx_hist is not None and not fx_hist.empty:
-                    # Megkeressük a vásárláshoz legközelebbi FX árfolyamot
                     fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
                     buy_fx = fx_btd['Close'].iloc[0] if not fx_btd.empty else curr_fx
                 else:
