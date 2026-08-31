@@ -212,18 +212,19 @@ def get_quant_summary():
         print(f"OpenAI hiba: {e}")
         return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
-# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ (GOLYÓÁLLÓ DEDIKÁLT SZŰRÉS) ---
+# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ (GARANTÁLT 5 HÍR) ---
 def get_smart_climate_news():
     api_key = os.environ.get("OPENAI_API_KEY")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
-    # Kizárólag tiszta zöld/energia források
     climate_feeds = [
         "https://www.portfolio.hu/rss/zoldvilag.xml",
         "https://g7.hu/category/zold/feed/",
         "https://hvg.hu/rss/zold",
         "https://telex.hu/rss/zold",
-        "https://hu.euronews.com/rss?format=xml&level=theme&name=green"
+        "https://hu.euronews.com/rss?format=xml&level=theme&name=green",
+        "https://villanyautosok.hu/feed/",
+        "https://nrgreport.com/rss"
     ]
     
     raw_climate = []
@@ -233,7 +234,7 @@ def get_smart_climate_news():
             resp = requests.get(f, headers=headers, timeout=8)
             if resp.status_code == 200:
                 parsed = feedparser.parse(resp.content)
-                for entry in parsed.entries[:10]:
+                for entry in parsed.entries[:25]:  # Bővített 25-ös merítés csatornánként
                     title = getattr(entry, 'title', '').strip()
                     link = getattr(entry, 'link', '').strip()
                     summary = getattr(entry, 'summary', '').strip()
@@ -242,7 +243,6 @@ def get_smart_climate_news():
         except Exception:
             continue
 
-    # Tartalék zöld hírforrás, ha a speciális RSS-ek nem válaszolnának (elkerülve a belpolitikát)
     if not raw_climate:
         raw_climate = [
             "Cím: Európai energiaátmenet és megújuló kapacitások fejlődése\nURL: https://www.portfolio.hu/zoldvilag",
@@ -255,18 +255,19 @@ def get_smart_climate_news():
 
     prompt = """
     Te egy vezető energetikai, környezetvédelmi és klímapolitikai szakértő vagy. 
-    A megadott nyers hírekből válogass ki PONTOSAN 5 darab, szigorúan a témaba vágó cikkeket.
+    A megadott nyers hírekből válogass ki PONTOSAN 5 DARAB magas minőségű, releváns hírt!
 
-    KÖTELEZŐ TÉMÁK:
+    KÖTELEZŐ TÉMÁK ÉS FÓKUSZ:
     - Klímapolitika, dekarbonizáció, fenntarthatóság.
-    - Energiaipar, megújuló energia, hálózatfejlesztés, atomenergia, energiapiacok.
+    - Energiaipar, megújuló energia, hálózatfejlesztés, e-mobilitás, atomenergia, energiapiacok.
     - Környezetvédelem, európai és magyar zöld szabályozások.
 
-    SZIGORÚAN TILTOTT TÉMÁK:
-    - Belpolitikai csatározások, általános pártpolitika, bűnügyi hírek, celeb/bulvár hírek.
-    - Bármilyen hír, ami nem közvetlenül energetikai, klíma vagy környezetvédelmi témájú.
+    SZIGORÚ SZABÁLYOK:
+    - A kimenetben PONTOSAN 5 DARAB <li> elemnek kell szerepelnie (semmiképp se kevesebbnek).
+    - Kizárólag a megadott input URL-eket használd fel.
+    - Kerüld a pártpolitikát, bulvárt és kattintásvadász cikkeket.
 
-    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető vagy lezáró szöveg NÉLKÜL:
+    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető szöveg NÉLKÜL:
     <ul style='padding-left:20px;'>
         <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
         <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
@@ -274,10 +275,6 @@ def get_smart_climate_news():
         <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
         <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
     </ul>
-
-    Rules:
-    - Kizárólag az inputban megadott pontos URL-eket használd fel!
-    - Ne használj markdown kódtömböket.
     """
 
     try:
@@ -309,7 +306,7 @@ def get_smart_sports_news():
             resp = requests.get(f, headers=headers, timeout=8)
             if resp.status_code == 200:
                 parsed = feedparser.parse(resp.content)
-                for entry in parsed.entries[:15]:
+                for entry in parsed.entries[:20]:
                     title = getattr(entry, 'title', '').strip()
                     link = getattr(entry, 'link', '').strip()
                     if title and link:
