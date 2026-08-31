@@ -4,6 +4,7 @@ import requests
 import feedparser
 from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
 import yfinance as yf
 
@@ -15,13 +16,26 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# --- 1. FRISS PIACI ADATOK LEKÉRÉSE ---
+# --- 1. IDŐJÁRÁS ELŐREJELZÉS ---
+def fetch_weather():
+    try:
+        # Pécs / Regionális időjárás lekérése
+        url = "https://wttr.in/Pecs?format=3"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.text.strip()
+    except Exception as e:
+        print(f"Hiba az időjárás lekérésekor: {e}")
+    return "Időjárás adatok átmenetileg nem érhetők el."
+
+# --- 2. RÉSZVÉNY & PIACI STATISZTIKÁK ---
 def fetch_market_tickers():
     tickers = {
         "S&P 500": "^GSPC",
         "NASDAQ": "^IXIC",
         "BUX": "^BUX",
-        "EUR/HUF": "EURHUF=X"
+        "EUR/HUF": "EURHUF=X",
+        "USD/HUF": "USDHUF=X"
     }
     summary = []
     for name, symbol in tickers.items():
@@ -35,17 +49,15 @@ def fetch_market_tickers():
                 summary.append(f"{name}: {curr_close:.2f} ({pct_change:+.2f}%)")
         except Exception as e:
             print(f"Hiba a {name} lekérésénél: {e}")
-    return " | ".join(summary) if summary else "Piac-specifikus adatok átmenetileg nem elérhetők."
+    return " | ".join(summary) if summary else "Piaci adatok nem érhetők el."
 
-# --- 2. MULTI-FEED TŐZSDEI HÍRGYŰJTŐ ---
+# --- 3. TŐZSDEI / GAZDASÁGI NYERS HÍREK ---
 def fetch_raw_financial_news():
     raw_news = []
     feed_urls = [
         "https://www.portfolio.hu/rss/all.xml",
-        "https://hvg.hu/rss/gazdasag",
-        "https://index.hu/24ora/rss/?f=gazdasag"
+        "https://hvg.hu/rss/gazdasag"
     ]
-    
     for feed_url in feed_urls:
         try:
             feed = feedparser.parse(feed_url)
@@ -54,21 +66,17 @@ def fetch_raw_financial_news():
                 link = entry.link.strip()
                 summary = getattr(entry, 'summary', '')
                 clean_summary = BeautifulSoup(summary, "html.parser").text.strip() if summary else ""
-                
                 if not any(link in item for item in raw_news):
                     raw_news.append(f"- Cím: {title}\n  Részletek: {clean_summary[:200]}\n  URL: {link}")
         except Exception as e:
             print(f"Hiba a forrás olvasásakor ({feed_url}): {e}")
+            
+    return "\n\n".join(raw_news[:15])
 
-    if not raw_news:
-        raw_news.append("- Cím: Global Market Movement Summary\n  Részletek: Macroeconomic policy and market shifts.\n  URL: https://www.bloomberg.com")
-
-    return "\n\n".join(raw_news[:20])
-
-# --- 3. KVANTITATÍV PIACI ELEMZÉS ---
+# --- 4. KVANTITATÍV TOP 3 TŐZSDEI ELEMZÉS (ÚJ PROMPT) ---
 def get_quant_market_summary(raw_news_text, market_data):
-    if not client:
-        return "Az API kulcs hiányzik a tőzsdei elemzés generálásához."
+    if not client or not raw_news_text:
+        return "Tőzsdei elemzés nem érhető el."
 
     system_prompt = (
         "Act as a senior quantitative equity analyst and financial journalist. "
@@ -91,14 +99,12 @@ def get_quant_market_summary(raw_news_text, market_data):
         "- Language of the output: Hungarian."
     )
 
-    user_content = f"Aktuális piaci mutatók:\n{market_data}\n\nNyers hírek:\n{raw_news_text}"
-
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
+                {"role": "user", "content": f"Aktuális piaci mutatók:\n{market_data}\n\nNyers hírek:\n{raw_news_text}"}
             ],
             temperature=0.2
         )
@@ -107,61 +113,67 @@ def get_quant_market_summary(raw_news_text, market_data):
         print(f"LLM hiba: {e}")
         return "Hiba történt a tőzsdei elemzés generálása során."
 
-# --- 4. ÁLTALÁNOS HÍREK LEKÉRÉSE ---
-def fetch_general_news():
-    general_news = []
-    feed_urls = [
-        "https://hvg.hu/rss",
-        "https://index.hu/24ora/rss/"
-    ]
-    for url in feed_urls:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:3]:
-                general_news.append(f"• {entry.title}\n  Link: {entry.link}")
-        except Exception as e:
-            print(f"Hiba az általános híreknél ({url}): {e}")
-            
-    return "\n\n".join(general_news) if general_news else "Általános hírek átmenetileg nem érhetők el."
+# --- 5. BELFÖLDI ÉS KÜLFÖLDI HÍREK GYŰJTÉSE ---
+def fetch_general_category(feed_url, limit=4):
+    items = []
+    try:
+        feed = feedparser.parse(feed_url)
+        for entry in feed.entries[:limit]:
+            title = entry.title.strip()
+            link = entry.link.strip()
+            items.append(f"• {title}\n  Link: {link}")
+    except Exception as e:
+        print(f"Hiba a(z) {feed_url} lekérésekor: {e}")
+    return "\n\n".join(items) if items else "Nincsenek elérhető hírek."
 
-# --- 5. HÍRLEVÉL ÖSSZEÁLLÍTÁSA ---
+# --- 6. TELJES HÍRLEVÉL STRUKTÚRA ÖSSZEÁLLÍTÁSA ---
 def build_full_newsletter():
-    print("Piaci mutatók és hírek gyűjtése...")
+    weather = fetch_weather()
     market_tickers = fetch_market_tickers()
-    raw_news = fetch_raw_financial_news()
-    quant_summary = get_quant_market_summary(raw_news, market_tickers)
     
-    print("Általános hírek gyűjtése...")
-    gen_news = fetch_general_news()
+    # Gazdaság
+    raw_fin = fetch_raw_financial_news()
+    quant_summary = get_quant_market_summary(raw_fin, market_tickers)
+    
+    # Belföld és Külföld
+    belfold_news = fetch_general_category("https://index.hu/24ora/rss/?f=belfold")
+    kulfold_news = fetch_general_category("https://index.hu/24ora/rss/?f=kulfold")
 
     newsletter_body = f"""NAPI AUTOMATIZÁLT HÍRLEVÉL
 
 ========================================
-FRISS PIACI MUTATÓK
+🌤️ IDŐJÁRÁS
+========================================
+{weather}
+
+========================================
+📊 RÉSZVÉNY & PIACI STATISZTIKÁK
 ========================================
 {market_tickers}
 
 ========================================
-TOP 3 TŐZSDEI & GAZDASÁGI ELEMZÉS (ALPHA FOCUS)
+📈 TOP 3 TŐZSDEI & GAZDASÁGI ELEMZÉS (ALPHA FOCUS)
 ========================================
-
 {quant_summary}
 
 ========================================
-FŐBB ÁLTALÁNOS HÍREK
+🇭🇺 BELFÖLDI HÍREK
 ========================================
+{belfold_news}
 
-{gen_news}
+========================================
+🌍 KÜLFÖLDI HÍREK
+========================================
+{kulfold_news}
 
 ----------------------------------------
 A hírlevél automatikusan frissült a GitHub Actions segítségével.
 """
     return newsletter_body
 
-# --- 6. E-MAIL KÜLDÉS ---
+# --- 7. E-MAIL KÜLDÉS ---
 def send_email(content):
     if not content:
-        print("Üres tartalom, e-mail nem kerül kiküldésre.")
         return
 
     msg = MIMEText(content, 'plain', 'utf-8')
