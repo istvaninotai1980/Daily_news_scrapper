@@ -13,11 +13,8 @@ from openai import OpenAI
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-
-# --- PORTFÓLIÓ ESZKÖZÖK ---
+# --- PORTFÓLIÓ ESZKÖZÖK (IBKR TBSZ-2025 PONTOS ADATOK ÉS FALLBACK SZIMBÓLUMOK) ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -58,6 +55,7 @@ def get_fx_pair(currency):
     return 1.0, None
 
 def fetch_history_with_fallback(symbols):
+    """Végigpróbálja a szimbólumlistát, amíg nem talál érvényes adatot adó tickert."""
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym)
@@ -77,6 +75,7 @@ def build_portfolio_table():
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
                 
+                # Londoni penny / dollár korrekció
                 if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] == "USD":
                     curr_price = curr_price / 100.0
 
@@ -84,6 +83,7 @@ def build_portfolio_table():
                 weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
                 monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
                 
+                # Devizás BTD
                 hist_btd = hist.loc[hist.index >= item["buy_date"]]
                 if not hist_btd.empty:
                     buy_price = hist_btd['Close'].iloc[0]
@@ -94,6 +94,7 @@ def build_portfolio_table():
                     buy_price = curr_price
                     dev_btd_pct = monthly_pct
 
+                # Tényleges HUF BTD kiszámítása
                 curr_fx, fx_hist = get_fx_pair(item["currency"])
                 if fx_hist is not None and not fx_hist.empty:
                     fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
@@ -147,6 +148,12 @@ def build_portfolio_table():
 
 # --- GOLYÓÁLLÓ GAZDASÁGI HÍRGYŰJTŐ & TOP 3 ELEMZŐ ---
 def get_quant_summary():
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return "<p style='color:red;'><b>Hiba:</b> Az OPENAI_API_KEY hiányzik a GitHub Secrets beállításokból!</p>"
+
+    local_client = OpenAI(api_key=api_key)
+
     raw_news = []
     feeds = [
         "https://www.portfolio.hu/rss/all.xml",
@@ -171,16 +178,12 @@ def get_quant_summary():
             print(f"Hiba a csatorna olvasásakor ({f}): {err}")
             continue
 
-    # Tartalék biztonsági hírek, ha semmilyen RSS nem válaszolna
     if not raw_news:
         raw_news = [
             "Cím: Globális piaci mozgások és kamatpolitikai várakozások\nURL: https://www.portfolio.hu/gazdasag",
             "Cím: Európai és amerikai részvénypiaci összefoglaló\nURL: https://hvg.hu/gazdasag",
             "Cím: Makrogazdasági indikátorok és devizapiaci elemzés\nURL: https://telex.hu/gazdasag"
         ]
-
-    if not client:
-        return "<p>OpenAI API kulcs hiányzik az elemzéshez.</p>"
 
     prompt = """
     Act as a senior quantitative equity analyst and financial journalist. 
@@ -203,15 +206,15 @@ def get_quant_summary():
     - Ensure the href attribute in the anchor tag contains the full absolute URL from the input.
     """
     try:
-        res = client.chat.completions.create(
-            model="gpt-4o",
+        res = local_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n\n".join(raw_news)}],
             temperature=0.2
         )
         return res.choices[0].message.content
     except Exception as e:
         print(f"OpenAI hiba: {e}")
-        return "<p>Hiba történt az elemzés generálása során.</p>"
+        return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
 def fetch_top_news(feed_urls, limit=5):
     items = []
