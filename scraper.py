@@ -212,7 +212,7 @@ def get_quant_summary():
         print(f"OpenAI hiba: {e}")
         return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
-# --- INTELLIGENS SPORT HÍRGYŰJTŐ ÉS SZŰRŐ ---
+# --- INTELLIGENS SPORT HÍRGYŰJTŐ ÉS SZŰRŐ (PONTOS FIX 5 HÍR STRUCTURA) ---
 def get_smart_sports_news():
     api_key = os.environ.get("OPENAI_API_KEY")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -229,7 +229,7 @@ def get_smart_sports_news():
             resp = requests.get(f, headers=headers, timeout=8)
             if resp.status_code == 200:
                 parsed = feedparser.parse(resp.content)
-                for entry in parsed.entries[:10]:
+                for entry in parsed.entries[:15]:
                     title = getattr(entry, 'title', '').strip()
                     link = getattr(entry, 'link', '').strip()
                     if title and link:
@@ -237,30 +237,31 @@ def get_smart_sports_news():
         except Exception:
             continue
 
-    if not raw_sports:
-        return fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
-
-    if not api_key:
+    if not raw_sports or not api_key:
         return fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
 
     prompt = """
     Te egy intelligens sportújságíró asszisztens vagy. 
-    A megadott nyers sport hírek közül válogasd ki a legfontosabb maximum 5-7 darab hírt, amelyek megfelelnek az alábbi preferenciáknak:
-    1. Világversenyek magyar vonatkozású eredményei (magyar sportolók, csapatok szereplése).
-    2. Bajnokok Ligája hírek és eredmények.
-    3. Premier League hírek, különösen a LIVERPOOL eredményei és történései.
-    4. Forma–1 (F1) hírek, futameredmények, időmérők.
+    A megadott nyers sporthírek közül válogass ki és állíts össze PONTOSAN 5 darab hírből álló válogatást a következő szigorú megoszlásban:
 
-    Kimeneti formátum: Kérlek, szigorúan tisztán HTML lista elemeket (`<ul style='padding-left:20px;'>...</ul>`) adj vissza!
-    Formátum minden elemre:
-    <li style='margin-bottom:8px;'>
-        <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a>
-    </li>
+    1. EXACTLY 1 Forma–1 (F1) hír.
+    2. EXACTLY 1 Liverpool FC / Premier League hír.
+    3. EXACTLY 3 Kiemelt magyar vonatkozású sporthír vagy világverseny eredmény.
+
+    Ha valamelyik kategóriából nem találsz közvetlen hírt az inputban, válaszd ki a legfontosabb általános sporthírt a helyére.
+
+    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető szöveg NÉLKÜL:
+    <ul style='padding-left:20px;'>
+        <li style='margin-bottom:8px;'>🏎️ <b>[Forma-1]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>⚽ <b>[Liverpool / PL]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🇭🇺 <b>[Magyar Sport]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🇭🇺 <b>[Magyar Sport]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🇭🇺 <b>[Magyar Sport]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+    </ul>
 
     Szabályok:
     - Kizárólag az inputban megadott pontos URL-eket használd fel.
-    - Csak a kért témákhoz illeszkedő híreket válogasd be. Ha kevés a specifikus hír, válaszd ki a legfontosabb általános sporthíreket.
-    - Ne írj szöveges felvezetőt, csak a HTML `<ul>...</ul>` struktúrát add vissza.
+    - Ne használj markdown kódtömböket vagy szöveges bevezetőt.
     """
 
     try:
@@ -324,7 +325,7 @@ def build_newsletter():
         <h3>🌍 Külföld (Top 5)</h3>{kulfold}
         <h3>💻 Tudomány & Tech (Top 5)</h3>{tech}
         <h3>🌱 Klíma & Zöld (Top 5)</h3>{klima}
-        <h3>⚽ Sport (Intelligens válogatás)</h3>{sport}
+        <h3>⚽ Sport (F1, Liverpool & Top Magyar)</h3>{sport}
     </body>
     </html>
     """
