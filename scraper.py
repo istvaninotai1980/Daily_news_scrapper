@@ -2,13 +2,14 @@ import os
 import smtplib
 import requests
 import feedparser
+import pandas as pd
+import yfinance as yf
 from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
-import yfinance as yf
 
-# --- BEÁLLÍTÁSOK & SECRETS ---
+# --- SECRETS & SETUP ---
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
@@ -16,193 +17,177 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# --- 1. IDŐJÁRÁS (PÉCS) ---
-def fetch_weather():
-    try:
-        url = "https://wttr.in/Pecs?format=%C+%t+%w"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            return f"Pécs: {response.text.strip()}"
-    except Exception as e:
-        print(f"Hiba az időjárás lekérésekor: {e}")
-    return "Pécs: MÉRTA/Adat átmenetileg nem elérhető"
+# --- PORTFÓLIÓ ESZKÖZÖK (BALANSZ) ---
+PORTFOLIO = [
+    {"name": "Broadcom (AVGO)", "symbol": "AVGO", "buy_date": "2026-08-28"},
+    {"name": "Nvidia IBIS (NVD)", "symbol": "NVD.DE", "buy_date": "2026-08-28"},
+    {"name": "Amazon (AMZ)", "symbol": "AMZN", "buy_date": "2026-07-29"},
+    {"name": "TSMC (TSM)", "symbol": "TSM", "buy_date": "2026-07-28"},
+    {"name": "Microsoft (MSF)", "symbol": "MSFT", "buy_date": "2026-04-16"},
+    {"name": "OTP Bank (OTP)", "symbol": "OTP.BD", "buy_date": "2026-03-06"},
+    {"name": "Physical Silver (ISLN)", "symbol": "ISLN.L", "buy_date": "2026-03-06"},
+    {"name": "Constellation Software (CSU)", "symbol": "CSU.TO", "buy_date": "2026-01-28"},
+    {"name": "Defence ETF (ARMY)", "symbol": "ARMY.L", "buy_date": "2026-01-19"},
+    {"name": "S&P 500 Info Tech (QDV5)", "symbol": "QDV5.DE", "buy_date": "2026-01-19"},
+    {"name": "Copper ETF (COPG)", "symbol": "COPG.L", "buy_date": "2026-01-19"},
+    {"name": "Global Growth ETF (GGRW)", "symbol": "GGRW.L", "buy_date": "2026-01-15"},
+    {"name": "S&P 500 ETF (VUSA)", "symbol": "VUSA.L", "buy_date": "2026-01-15"}
+]
 
-# --- 2. PIACI MUTATÓK ---
-def fetch_market_tickers():
-    tickers = {
-        "S&P 500": "^GSPC",
-        "NASDAQ": "^IXIC",
-        "BUX": "^BUX",
-        "EUR/HUF": "EURHUF=X",
-        "USD/HUF": "USDHUF=X"
-    }
-    summary = []
-    for name, symbol in tickers.items():
+def format_pct(val):
+    if pd.isna(val):
+        return "<td style='padding:8px; text-align:center;'>Adatfrissítés alatt</td>"
+    color = "green" if val >= 0 else "red"
+    sign = "+" if val >= 0 else ""
+    return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold;'>{sign}{val:.2f}%</td>"
+
+def build_portfolio_table():
+    rows_html = ""
+    for item in PORTFOLIO:
         try:
-            ticker = yf.Ticker(symbol)
-            data = ticker.history(period="2d")
-            if len(data) >= 2:
-                prev_close = data['Close'].iloc[-2]
-                curr_close = data['Close'].iloc[-1]
-                pct_change = ((curr_close - prev_close) / prev_close) * 100
-                color = "#2e7d32" if pct_change >= 0 else "#c62828"
-                summary.append(f"<b>{name}:</b> {curr_close:.2f} (<span style='color:{color};'>{pct_change:+.2f}%</span>)")
-        except Exception as e:
-            print(f"Hiba a {name} lekérésénél: {e}")
-    return " &nbsp;|&nbsp; ".join(summary) if summary else "Piaci adatok átmenetileg nem elérhetők."
+            ticker = yf.Ticker(item["symbol"])
+            hist = ticker.history(period="1mo")
+            if not hist.empty and len(hist) >= 2:
+                curr_price = hist['Close'].iloc[-1]
+                currency = ticker.info.get('currency', 'USD')
+                
+                daily_pct = ((curr_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
+                weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0.0
+                monthly_pct = ((curr_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100
+                
+                rows_html += f"""
+                <tr>
+                    <td style="padding:8px; font-weight:bold;">{item['name']}</td>
+                    <td style="padding:8px; text-align:center;">{item['buy_date']}</td>
+                    <td style="padding:8px; text-align:center;">{curr_price:.2f} {currency}</td>
+                    {format_pct(daily_pct)}
+                    {format_pct(weekly_pct)}
+                    {format_pct(monthly_pct)}
+                    {format_pct(monthly_pct)}
+                    {format_pct(monthly_pct)}
+                </tr>
+                """
+            else:
+                rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
+        except Exception:
+            rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
 
-# --- 3. GAZDASÁGI / TŐZSDEI HÍRGYŰJTŐ ---
-def fetch_raw_financial_news():
+    table_html = f"""
+    <table border="1" style="border-collapse:collapse; width:100%; font-size:13px; font-family:sans-serif;">
+        <thead style="background-color:#f2f2f2;">
+            <tr>
+                <th style="padding:8px;">Eszköz</th>
+                <th style="padding:8px;">Vásárlás dátuma</th>
+                <th style="padding:8px;">Ár</th>
+                <th style="padding:8px;">Napi %</th>
+                <th style="padding:8px;">Heti %</th>
+                <th style="padding:8px;">Havi %</th>
+                <th style="padding:8px;">Devizás BTD %</th>
+                <th style="padding:8px;">HUF BTD %</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows_html}
+        </tbody>
+    </table>
+    """
+    return table_html
+
+# --- KVANTITATÍV TOP 3 ELEMZÉS ---
+def get_quant_summary():
     raw_news = []
-    feed_urls = [
-        "https://www.portfolio.hu/rss/all.xml",
-        "https://hvg.hu/rss/gazdasag",
-        "https://index.hu/24ora/rss/?f=gazdasag"
-    ]
-    for feed_url in feed_urls:
-        try:
-            feed = feedparser.parse(feed_url)
-            for entry in feed.entries[:8]:
-                title = entry.title.strip()
-                link = entry.link.strip()
-                summary = getattr(entry, 'summary', '')
-                clean_summary = BeautifulSoup(summary, "html.parser").text.strip() if summary else ""
-                if not any(link in item for item in raw_news):
-                    raw_news.append(f"- Cím: {title}\n  Részletek: {clean_summary[:200]}\n  URL: {link}")
-        except Exception as e:
-            print(f"Hiba a forrás olvasásakor ({feed_url}): {e}")
+    feeds = ["https://www.portfolio.hu/rss/all.xml", "https://hvg.hu/rss/gazdasag"]
+    for f in feeds:
+        parsed = feedparser.parse(f)
+        for e in parsed.entries[:6]:
+            raw_news.append(f"- Cím: {e.title}\n  Link: {e.link}")
             
-    return "\n\n".join(raw_news[:15])
+    if not client or not raw_news:
+        return "<p>Tőzsdei elemzés átmenetileg nem elérhető.</p>"
 
-# --- 4. TOP 3 TŐZSDEI ELEMZÉS (ÚJ QUANT PROMPT) ---
-def get_quant_market_summary(raw_news_text, market_data):
-    if not client or not raw_news_text:
-        return "<p>Tőzsdei elemzés nem érhető el.</p>"
-
-    system_prompt = (
-        "Act as a senior quantitative equity analyst and financial journalist. "
-        "Your task is to filter a list of raw economic/financial news and generate a highly concentrated, "
-        "professional news summary containing exactly the TOP 3 most credible, market-moving stories.\n\n"
-        "Focus strictly on information that creates 'alpha' or carries material weight for an investor's portfolio "
-        "(e.g., central bank policy shifts, major macroeconomic indicators, corporate earnings surprises of large-cap stocks, "
-        "regulatory changes, or structural market trends). Completely eliminate generic PR spin, broad opinion pieces, "
-        "and low-impact daily noise.\n\n"
-        "Format the output using HTML tags so it renders cleanly in an email body. For each of the top 3 stories use this structure:\n"
-        "<div style='margin-bottom: 20px; padding: 12px; border-left: 4px solid #1976d2; background-color: #f8f9fa;'>"
-        "<h3 style='margin-top:0; color:#0d47a1;'>[Sorszám]. 📈 [A hír lényegét összefoglaló, szakmai cím]</h3>"
-        "<p><b>A hír lényege (Signal):</b> 1-2 rövid, tömör mondatban mutasd be a tényeket. Mit jelent ez a piac számára?</p>"
-        "<p><b>Befektetői hatás (Investor Impact):</b> Mi a közvetlen implikációja a hírnek? (Pl. szektorspecifikus kockázatok, eszközallokációs hatás, várható volatilitás).</p>"
-        "<p><b>Forrás:</b> <a href='IDE ILLESZD BE AZ ADOTT HÍRHEZ TARTOZÓ EREDETI URL-T' target='_blank'>Kattints a hír eredeti forrásához</a></p>"
-        "</div>\n\n"
-        "Rules to follow:\n"
-        "- Maintain a clinical, objective, and dense financial tone. Avoid emotional language or hype.\n"
-        "- Stick strictly to the provided text. If an original URL is not available in the source data for a story, "
-        "use the main domain name (e.g., Portfolio.hu, Bloomberg.com) as anchor text and do not hallucinate a fake full link.\n"
-        "- Language of the output: Hungarian."
-    )
-
+    prompt = """
+    Act as a senior quantitative equity analyst and financial journalist. 
+    Filter raw news and generate a concentrated news summary containing exactly the TOP 3 most credible, market-moving stories.
+    Format as HTML:
+    <div style='margin-bottom:15px; padding:10px; border-left:4px solid #1976d2; background:#f8f9fa;'>
+        <h4 style='margin:0; color:#0d47a1;'>[Sorszám]. 📈 [Cím]</h4>
+        <p><b>A hír lényege (Signal):</b> [1-2 mondat]</p>
+        <p><b>Befektetői hatás (Investor Impact):</b> [Implikáció]</p>
+        <p><b>Forrás:</b> <a href='[Eredeti URL]'>Kattints az eredeti cikkhez</a></p>
+    </div>
+    Rules: Hungarian language. Clinical, objective tone. Stick strictly to provided text links.
+    """
     try:
-        response = client.chat.completions.create(
+        res = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Aktuális piaci mutatók:\n{market_data}\n\nNyers hírek:\n{raw_news_text}"}
-            ],
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n".join(raw_news)}],
             temperature=0.2
         )
-        return response.choices[0].message.content
+        return res.choices[0].message.content
     except Exception as e:
-        print(f"LLM hiba: {e}")
-        return "<p>Hiba történt a tőzsdei elemzés generálása során.</p>"
+        return f"<p>Hiba az elemzéskor: {e}</p>"
 
-# --- 5. BELFÖLDI / KÜLFÖLDI HÍREK ---
-def fetch_general_category_html(feed_url, limit=4):
-    html_items = []
+# --- KATEGÓRIA HÍREK ---
+def fetch_top_news(rss_url, limit=5):
+    items = []
     try:
-        feed = feedparser.parse(feed_url)
-        for entry in feed.entries[:limit]:
-            title = entry.title.strip()
-            link = entry.link.strip()
-            html_items.append(f"<li style='margin-bottom: 8px;'><a href='{link}' style='color: #1a0dab; text-decoration: none; font-weight: bold;' target='_blank'>{title}</a></li>")
-    except Exception as e:
-        print(f"Hiba a(z) {feed_url} lekérésekor: {e}")
-    return f"<ul style='padding-left: 20px; margin: 0;'>{''.join(html_items)}</ul>" if html_items else "<p>Nincsenek elérhető hírek.</p>"
+        parsed = feedparser.parse(rss_url)
+        for entry in parsed.entries[:limit]:
+            items.append(f"<li style='margin-bottom:6px;'><a href='{entry.link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;'>{entry.title}</a></li>")
+    except Exception:
+        pass
+    return f"<ul style='padding-left:20px;'>{''.join(items)}</ul>" if items else "<p>Nincs elérhető hír.</p>"
 
-# --- 6. TELJES HTML HÍRLEVÉL KÓD ---
-def build_full_newsletter_html():
-    weather = fetch_weather()
-    market_tickers = fetch_market_tickers()
+# --- TELJES HTML ÖSSZEÁLLÍTÁS ---
+def build_newsletter():
+    portfolio_table = build_portfolio_table()
+    quant_analysis = get_quant_summary()
     
-    raw_fin = fetch_raw_financial_news()
-    quant_summary = get_quant_market_summary(raw_fin, market_tickers)
-    
-    belfold_html = fetch_general_category_html("https://index.hu/24ora/rss/?f=belfold")
-    kulfold_html = fetch_general_category_html("https://index.hu/24ora/rss/?f=kulfold")
+    belfold = fetch_top_news("https://index.hu/24ora/rss/?f=belfold", 5)
+    kulfold = fetch_top_news("https://index.hu/24ora/rss/?f=kulfold", 5)
+    tech = fetch_top_news("https://hvg.hu/rss/tudomány", 5)
+    klima = fetch_top_news("https://index.hu/24ora/rss/?f=zold", 5)
+    sport = fetch_top_news("https://index.hu/24ora/rss/?f=sport", 5)
 
-    html_template = f"""
+    html = f"""
     <!DOCTYPE html>
     <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; color: #333333; margin: 0; padding: 20px; }}
-            .container {{ max-width: 680px; margin: 0 auto; background: #ffffff; border-radius: 8px; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }}
-            .header {{ text-align: center; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px; margin-bottom: 20px; }}
-            .header h1 {{ margin: 0; color: #1a237e; font-size: 24px; }}
-            .section {{ margin-bottom: 25px; }}
-            .section-title {{ font-size: 18px; color: #1565c0; border-bottom: 1px solid #bbdefb; padding-bottom: 5px; margin-bottom: 12px; }}
-            .market-box {{ background: #eef2f7; padding: 12px; border-radius: 6px; font-size: 14px; line-height: 1.6; text-align: center; }}
-            .footer {{ text-align: center; font-size: 12px; color: #777777; margin-top: 30px; border-top: 1px solid #eeeeee; padding-top: 10px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>📰 Napi Automatizált Hírlevél</h1>
-                <p style="margin: 5px 0 0 0; color: #666666; font-size: 14px;">🌤️ {weather}</p>
-            </div>
-
-            <div class="section">
-                <div class="section-title">📊 Friss Piaci Mutatók</div>
-                <div class="market-box">{market_tickers}</div>
-            </div>
-
-            <div class="section">
-                <div class="section-title">📈 TOP 3 Tőzsdei & Gazdasági Elemzés (Alpha Focus)</div>
-                {quant_summary}
-            </div>
-
-            <div class="section">
-                <div class="section-title">🇭🇺 Belföldi Hírek</div>
-                {belfold_html}
-            </div>
-
-            <div class="section">
-                <div class="section-title">🌍 Külföldi Hírek</div>
-                {kulfold_html}
-            </div>
-
-            <div class="footer">
-                A hírlevél automatikusan frissült a GitHub Actions segítségével.
-            </div>
-        </div>
+    <body style="font-family:Arial, sans-serif; color:#333; padding:20px;">
+        <h2>Balansz</h2>
+        {portfolio_table}
+        
+        <br><hr><br>
+        
+        <h3>📈 TOP 3 Tőzsdei & Gazdasági Elemzés (Alpha Focus)</h3>
+        {quant_analysis}
+        
+        <br><hr><br>
+        
+        <h3>🇭🇺 Belföld (Top 5)</h3>
+        {belfold}
+        
+        <h3>🌍 Külföld (Top 5)</h3>
+        {kulfold}
+        
+        <h3>💻 Tudomány & Tech (Top 5)</h3>
+        {tech}
+        
+        <h3>🌱 Klíma & Zöld (Top 5)</h3>
+        {klima}
+        
+        <h3>⚽ Sport</h3>
+        {sport}
     </body>
     </html>
     """
-    return html_template
+    return html
 
-# --- 7. E-MAIL KÜLDÉS (MIME HTML) ---
 def send_email(html_content):
-    if not html_content:
-        return
-
     msg = MIMEMultipart('alternative')
     msg['From'] = SENDER_EMAIL
     msg['To'] = RECEIVER_EMAIL
-    msg['Subject'] = "Napi Hírlevél & Kvantitatív Piaci Összefoglaló"
-
-    part_html = MIMEText(html_content, 'html', 'utf-8')
-    msg.attach(part_html)
+    msg['Subject'] = "Napi Hírlevél & Balansz Portfólió"
+    msg.attach(MIMEText(html_content, 'html', 'utf-8'))
 
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -212,8 +197,8 @@ def send_email(html_content):
         server.quit()
         print("E-mail sikeresen elküldve!")
     except Exception as e:
-        print(f"Hiba az e-mail küldésekor: {e}")
+        print(f"Hiba küldéskor: {e}")
 
 if __name__ == "__main__":
-    html_body = build_full_newsletter_html()
-    send_email(html_body)
+    content = build_newsletter()
+    send_email(content)
