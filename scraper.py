@@ -212,7 +212,77 @@ def get_quant_summary():
         print(f"OpenAI hiba: {e}")
         return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
-# --- INTELLIGENS SPORT HÍRGYŰJTŐ ÉS SZŰRŐ (PONTOS FIX 5 HÍR STRUCTURA) ---
+# --- INTELLIGENS KLÍMA & ENERGIA SZŰRŐ ---
+def get_smart_climate_news():
+    api_key = os.environ.get("OPENAI_API_KEY")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    # DEDIKÁLT SZAKMAI & HITELES KLÍMA/ENERGIA FORRÁSOK
+    climate_feeds = [
+        "https://www.portfolio.hu/rss/zoldvilag.xml",
+        "https://g7.hu/category/zold/feed/",
+        "https://hvg.hu/rss/zold",
+        "https://telex.hu/rss/zold",
+        "https://hu.euronews.com/rss?format=xml&level=theme&name=green"
+    ]
+    
+    raw_climate = []
+    for f in climate_feeds:
+        try:
+            resp = requests.get(f, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.content)
+                for entry in parsed.entries[:10]:
+                    title = getattr(entry, 'title', '').strip()
+                    link = getattr(entry, 'link', '').strip()
+                    if title and link:
+                        raw_climate.append(f"Cím: {title}\nURL: {link}")
+        except Exception:
+            continue
+
+    if not raw_climate or not api_key:
+        return fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
+
+    prompt = """
+    Te egy vezető energetikai és klímapolitikai szakértő/szerkesztő vagy. 
+    A megadott nyers hírekből válogass ki PONTOSAN 5 darab magas minőségű, objektív, szakmailag hiteles hírt.
+
+    TÉMÁK ÉS PRIORITÁSOK:
+    1. Energiaátmenet, megújuló energiaforrások, hálózatfejlesztés, atomenergia, energiapiacok.
+    2. Klímagazdaság, ESG, dekarbonizáció, ipari fenntarthatóság, EU ETS szén-dioxid kvórák.
+    3. Európai és magyar vonatkozású klímapolitikai, szabályozási és környezetvédelmi döntések.
+
+    KISZŰRENDŐ:
+    - Kerüld a szenzációhajsza, kattintásvadász, alarmista vagy populista cikkeket!
+    - Kerüld a triviális, kis hatású életmódtippeket.
+
+    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető szöveg NÉLKÜL:
+    <ul style='padding-left:20px;'>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+    </ul>
+
+    Szabályok:
+    - Kizárólag az inputban megadott pontos URL-eket használd fel!
+    - Ne használj markdown kódtömböket vagy felvezető szöveget.
+    """
+
+    try:
+        local_client = OpenAI(api_key=api_key)
+        res = local_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n\n".join(raw_climate)}],
+            temperature=0.2
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        print(f"Smart Climate Error: {e}")
+        return fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
+
+# --- INTELLIGENS SPORT HÍRGYŰJTŐ ÉS SZŰRŐ ---
 def get_smart_sports_news():
     api_key = os.environ.get("OPENAI_API_KEY")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -308,7 +378,7 @@ def build_newsletter():
     belfold = fetch_top_news(["https://hvg.hu/rss/itthon", "https://telex.hu/rss/belfold"], 5)
     kulfold = fetch_top_news(["https://hvg.hu/rss/vilag", "https://telex.hu/rss/kulfold"], 5)
     tech = fetch_top_news(["https://hvg.hu/rss/tudomany", "https://telex.hu/rss/tech"], 5)
-    klima = fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
+    klima = get_smart_climate_news()
     sport = get_smart_sports_news()
 
     return f"""
@@ -324,7 +394,7 @@ def build_newsletter():
         <h3>🇭🇺 Belföld (Top 5)</h3>{belfold}
         <h3>🌍 Külföld (Top 5)</h3>{kulfold}
         <h3>💻 Tudomány & Tech (Top 5)</h3>{tech}
-        <h3>🌱 Klíma & Zöld (Top 5)</h3>{klima}
+        <h3>🌱 Klíma, Energia & Zöld Gazdaság</h3>{klima}
         <h3>⚽ Sport (F1, Liverpool & Top Magyar)</h3>{sport}
     </body>
     </html>
