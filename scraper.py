@@ -72,7 +72,7 @@ def build_portfolio_table():
         except Exception:
             rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
 
-    table_html = f"""
+    return f"""
     <table border="1" style="border-collapse:collapse; width:100%; font-size:13px; font-family:sans-serif;">
         <thead style="background-color:#f2f2f2;">
             <tr>
@@ -91,7 +91,6 @@ def build_portfolio_table():
         </tbody>
     </table>
     """
-    return table_html
 
 # --- KVANTITATÍV TOP 3 ELEMZÉS ---
 def get_quant_summary():
@@ -127,15 +126,26 @@ def get_quant_summary():
     except Exception as e:
         return f"<p>Hiba az elemzéskor: {e}</p>"
 
-# --- KATEGÓRIA HÍREK ---
-def fetch_top_news(rss_url, limit=5):
+# --- EGYEDI ROVAT FEED-EK ---
+def fetch_top_news(feed_urls, limit=5):
     items = []
-    try:
-        parsed = feedparser.parse(rss_url)
-        for entry in parsed.entries[:limit]:
-            items.append(f"<li style='margin-bottom:6px;'><a href='{entry.link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;'>{entry.title}</a></li>")
-    except Exception:
-        pass
+    seen_titles = set()
+    
+    for url in feed_urls:
+        try:
+            parsed = feedparser.parse(url)
+            for entry in parsed.entries:
+                title = entry.title.strip()
+                if title not in seen_titles:
+                    seen_titles.add(title)
+                    items.append(f"<li style='margin-bottom:6px;'><a href='{entry.link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;'>{title}</a></li>")
+                if len(items) >= limit:
+                    break
+        except Exception:
+            continue
+        if len(items) >= limit:
+            break
+
     return f"<ul style='padding-left:20px;'>{''.join(items)}</ul>" if items else "<p>Nincs elérhető hír.</p>"
 
 # --- TELJES HTML ÖSSZEÁLLÍTÁS ---
@@ -143,11 +153,12 @@ def build_newsletter():
     portfolio_table = build_portfolio_table()
     quant_analysis = get_quant_summary()
     
-    belfold = fetch_top_news("https://index.hu/24ora/rss/?f=belfold", 5)
-    kulfold = fetch_top_news("https://index.hu/24ora/rss/?f=kulfold", 5)
-    tech = fetch_top_news("https://hvg.hu/rss/tudomány", 5)
-    klima = fetch_top_news("https://index.hu/24ora/rss/?f=zold", 5)
-    sport = fetch_top_news("https://index.hu/24ora/rss/?f=sport", 5)
+    # Dedikált, tiszta RSS források rovatok szerint
+    belfold = fetch_top_news(["https://hvg.hu/rss/itthon", "https://telex.hu/rss/belfold"], 5)
+    kulfold = fetch_top_news(["https://hvg.hu/rss/vilag", "https://telex.hu/rss/kulfold"], 5)
+    tech = fetch_top_news(["https://hvg.hu/rss/tudomany", "https://telex.hu/rss/tech"], 5)
+    klima = fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
+    sport = fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
 
     html = f"""
     <!DOCTYPE html>
@@ -175,7 +186,7 @@ def build_newsletter():
         <h3>🌱 Klíma & Zöld (Top 5)</h3>
         {klima}
         
-        <h3>⚽ Sport</h3>
+        <h3>⚽ Sport (Top 5)</h3>
         {sport}
     </body>
     </html>
