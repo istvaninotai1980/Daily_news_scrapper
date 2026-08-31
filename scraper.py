@@ -58,7 +58,6 @@ def get_fx_pair(currency):
     return 1.0, None
 
 def fetch_history_with_fallback(symbols):
-    """Végigpróbálja a szimbólumlistát, amíg nem talál érvényes adatot adó tickert."""
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym)
@@ -78,7 +77,6 @@ def build_portfolio_table():
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
                 
-                # Londoni penny / dollár korrekció
                 if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] == "USD":
                     curr_price = curr_price / 100.0
 
@@ -86,7 +84,6 @@ def build_portfolio_table():
                 weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
                 monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
                 
-                # Devizás BTD
                 hist_btd = hist.loc[hist.index >= item["buy_date"]]
                 if not hist_btd.empty:
                     buy_price = hist_btd['Close'].iloc[0]
@@ -97,7 +94,6 @@ def build_portfolio_table():
                     buy_price = curr_price
                     dev_btd_pct = monthly_pct
 
-                # Tényleges HUF BTD kiszámítása
                 curr_fx, fx_hist = get_fx_pair(item["currency"])
                 if fx_hist is not None and not fx_hist.empty:
                     fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
@@ -149,15 +145,15 @@ def build_portfolio_table():
     </table>
     """
 
-# --- TOP 3 ELEMZÉS & HÍREK ---
+# --- TOP 3 ELEMZÉS ELEMZŐ LÁNC KÖZVETLEN HTML LINK GENERÁLÁSSAL ---
 def get_quant_summary():
     raw_news = []
     feeds = ["https://www.portfolio.hu/rss/all.xml", "https://hvg.hu/rss/gazdasag"]
     for f in feeds:
         try:
             parsed = feedparser.parse(f)
-            for e in parsed.entries[:6]:
-                raw_news.append(f"- Cím: {e.title}\n  Link: {e.link}")
+            for e in parsed.entries[:8]:
+                raw_news.append(f"Cím: {e.title}\nURL: {e.link}")
         except Exception:
             continue
 
@@ -166,20 +162,28 @@ def get_quant_summary():
 
     prompt = """
     Act as a senior quantitative equity analyst and financial journalist. 
-    Filter raw news and generate a concentrated news summary containing exactly the TOP 3 most credible, market-moving stories.
-    Format strictly as HTML:
-    <div style='margin-bottom:15px; padding:10px; border-left:4px solid #1976d2; background:#f8f9fa;'>
-        <h4 style='margin:0; color:#0d47a1;'>[Sorszám]. 📈 [Cím]</h4>
-        <p><b>A hír lényege (Signal):</b> [1-2 mondat]</p>
-        <p><b>Befektetői hatás (Investor Impact):</b> [Implikáció]</p>
-        <p><b>Forrás:</b> <a href='[Eredeti URL]'>Kattints az eredeti cikkhez</a></p>
+    Filter the provided raw financial news and generate a concentrated summary of exactly the TOP 3 most market-moving stories.
+
+    CRITICAL LINKING RULE:
+    Each story MUST contain a working HTML hyperlink targeting the EXACT 'URL' provided in the input text for that specific article. Do NOT invent fake links, do NOT output markdown syntax.
+
+    Format strictly as pure HTML for each story:
+    <div style='margin-bottom:15px; padding:12px; border-left:4px solid #1976d2; background:#f8f9fa;'>
+        <h4 style='margin:0 0 8px 0; color:#0d47a1;'>[Sorszám]. 📈 [Cím]</h4>
+        <p style='margin:4px 0;'><b>A hír lényege (Signal):</b> [1-2 tömör mondat]</p>
+        <p style='margin:4px 0;'><b>Befektetői hatás (Investor Impact):</b> [Szakmai implikáció]</p>
+        <p style='margin:4px 0;'><b>Forrás:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="color:#1a0dab; font-weight:bold;" target="_blank">Kattints a teljes cikk elolvasásához</a></p>
     </div>
-    Rules: Hungarian language. Clinical, objective tone. Stick strictly to provided text links.
+
+    Rules:
+    - Output language: Hungarian.
+    - Professional, objective, financial tone.
+    - Ensure the href attribute in the anchor tag contains the full absolute URL from the input.
     """
     try:
         res = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n".join(raw_news)}],
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n\n".join(raw_news)}],
             temperature=0.2
         )
         return res.choices[0].message.content
@@ -196,7 +200,7 @@ def fetch_top_news(feed_urls, limit=5):
                 title = entry.title.strip()
                 if title not in seen_titles:
                     seen_titles.add(title)
-                    items.append(f"<li style='margin-bottom:6px;'><a href='{entry.link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;'>{title}</a></li>")
+                    items.append(f"<li style='margin-bottom:6px;'><a href='{entry.link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;' target='_blank'>{title}</a></li>")
                 if len(items) >= limit:
                     break
         except Exception:
