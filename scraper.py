@@ -41,22 +41,35 @@ def format_pct(val):
     sign = "+" if val >= 0 else ""
     return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold;'>{sign}{val:.2f}%</td>"
 
+def get_fx_rate_on_date_or_latest(fx_symbol, target_date):
+    """
+    Lekéri a devizapár záróárfolyamát a megadott dátumon vagy az ahhoz legközelebbi korábbi kereskedési napon.
+    """
+    try:
+        fx = yf.Ticker(fx_symbol)
+        hist = fx.history(start=target_date)
+        if not hist.empty:
+            return hist['Close'].iloc[0], hist['Close'].iloc[-1]
+    except Exception as e:
+        print(f"Hiba az FX lekeresekor ({fx_symbol}): {e}")
+    return None, None
+
 def get_fx_change(currency, buy_date):
     if currency == 'HUF':
         return 0.0
-    symbol_map = {'USD': 'USDHUF=X', 'EUR': 'EURHUF=X', 'CAD': 'CADHUF=X', 'GBP': 'GBPHUF=X'}
+    symbol_map = {
+        'USD': 'USDHUF=X',
+        'EUR': 'EURHUF=X',
+        'CAD': 'CADHUF=X',
+        'GBP': 'GBPHUF=X'
+    }
     fx_symbol = symbol_map.get(currency)
     if not fx_symbol:
         return 0.0
-    try:
-        fx = yf.Ticker(fx_symbol)
-        hist = fx.history(start=buy_date)
-        if len(hist) >= 2:
-            start_fx = hist['Close'].iloc[0]
-            curr_fx = hist['Close'].iloc[-1]
-            return ((curr_fx - start_fx) / start_fx) * 100
-    except Exception as e:
-        print(f"FX hiba ({currency}): {e}")
+
+    start_fx, curr_fx = get_fx_rate_on_date_or_latest(fx_symbol, buy_date)
+    if start_fx and curr_fx and start_fx > 0:
+        return ((curr_fx - start_fx) / start_fx) * 100
     return 0.0
 
 def build_portfolio_table():
@@ -69,6 +82,10 @@ def build_portfolio_table():
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
                 currency = ticker.info.get('currency', 'USD')
+                if not currency or currency == 'GBp':  # Londoni pence korrekcio
+                    currency = 'GBP'
+                    if item["symbol"].endswith(".L"):
+                        curr_price = curr_price / 100.0
                 
                 # Árfolyam elmozdulások az alapeszközben
                 daily_pct = ((curr_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
@@ -79,13 +96,15 @@ def build_portfolio_table():
                 hist_btd = ticker.history(start=item["buy_date"])
                 if not hist_btd.empty:
                     buy_price = hist_btd['Close'].iloc[0]
+                    if item["symbol"].endswith(".L") and currency == 'GBP':
+                        buy_price = buy_price / 100.0
                     dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100
                 else:
                     dev_btd_pct = monthly_pct
 
-                # FX elmozdulás és HUF BTD % kiszámítása
+                # FX elmozdulás és pontos HUF BTD % kiszámítása
                 fx_pct = get_fx_change(currency, item["buy_date"])
-                huf_btd_pct = ((1 + dev_btd_pct / 100) * (1 + fx_pct / 100) - 1) * 100
+                huf_btd_pct = ((1 + dev_btd_pct / 100.0) * (1 + fx_pct / 100.0) - 1.0) * 100.0
 
                 rows_html += f"""
                 <tr>
