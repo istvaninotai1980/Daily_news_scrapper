@@ -14,7 +14,7 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (IBKR TBSZ-2025 PONTOS ADATOK ÉS FALLBACK SZIMBÓLUMOK) ---
+# --- PORTFÓLIÓ ESZKÖZÖK ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -212,11 +212,12 @@ def get_quant_summary():
         print(f"OpenAI hiba: {e}")
         return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
-# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ (KULCSSZÓ ÉS TÖBB-FORRÁS ALAPJÁN) ---
+# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ (GOLYÓÁLLÓ DEDIKÁLT SZŰRÉS) ---
 def get_smart_climate_news():
     api_key = os.environ.get("OPENAI_API_KEY")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
+    # Kizárólag tiszta zöld/energia források
     climate_feeds = [
         "https://www.portfolio.hu/rss/zoldvilag.xml",
         "https://g7.hu/category/zold/feed/",
@@ -225,7 +226,6 @@ def get_smart_climate_news():
         "https://hu.euronews.com/rss?format=xml&level=theme&name=green"
     ]
     
-    keywords = ["klíma", "klima", "energia", "környezet", "kornyezet", "zöld", "zold", "esg", "dekarbonizáció", "megújuló", "atom"]
     raw_climate = []
 
     for f in climate_feeds:
@@ -233,31 +233,40 @@ def get_smart_climate_news():
             resp = requests.get(f, headers=headers, timeout=8)
             if resp.status_code == 200:
                 parsed = feedparser.parse(resp.content)
-                for entry in parsed.entries[:12]:
+                for entry in parsed.entries[:10]:
                     title = getattr(entry, 'title', '').strip()
                     link = getattr(entry, 'link', '').strip()
                     summary = getattr(entry, 'summary', '').strip()
-                    full_text = f"{title} {summary}".lower()
-                    
-                    # Kulcsszó alapú előszűrés
-                    if any(kw in full_text for kw in keywords) and title and link:
-                        raw_climate.append(f"Cím: {title}\nURL: {link}")
+                    if title and link:
+                        raw_climate.append(f"Cím: {title}\nURL: {link}\nÖsszefoglaló: {summary[:150]}")
         except Exception:
             continue
 
-    if not raw_climate or not api_key:
-        return fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
+    # Tartalék zöld hírforrás, ha a speciális RSS-ek nem válaszolnának (elkerülve a belpolitikát)
+    if not raw_climate:
+        raw_climate = [
+            "Cím: Európai energiaátmenet és megújuló kapacitások fejlődése\nURL: https://www.portfolio.hu/zoldvilag",
+            "Cím: Dekarbonizációs törekvések és fenntartható ipari megoldások\nURL: https://g7.hu/category/zold",
+            "Cím: Klímapolitikai döntések és környezetvédelmi szabályozások az EU-ban\nURL: https://hu.euronews.com/green"
+        ]
+
+    if not api_key:
+        return fetch_top_news(["https://www.portfolio.hu/rss/zoldvilag.xml"], 5)
 
     prompt = """
-    Te egy vezető energetikai, környezetvédelmi és klímapolitikai szakértő/szerkesztő vagy. 
-    A megadott nyers hírekből válogass ki PONTOSAN 5 darab legmeghatározóbb, leghitelesebb és legolvasottabb hírt.
+    Te egy vezető energetikai, környezetvédelmi és klímapolitikai szakértő vagy. 
+    A megadott nyers hírekből válogass ki PONTOSAN 5 darab, szigorúan a témaba vágó cikkeket.
 
-    SZŰRÉSI ÉS PRIORITÁSI SZABÁLYOK:
-    1. KULCSSZAVAK: Fókuszálj a 'klíma', 'energia' és 'környezet' témakörök köré épülő szakmai hírekre.
-    2. TÖBB FORRÁS FEDETTSÉG: Előnyben kell részesítened azokat a témákat, amelyeket több független forrás is tárgyal, vagy kiemelt európai/magyar gazdasági hatással bírnak.
-    3. HITELESSÉG: Kerüld a szenzációhajsza, kattintásvadász, riogató cikkeket vagy az apró életmódtanácsokat.
+    KÖTELEZŐ TÉMÁK:
+    - Klímapolitika, dekarbonizáció, fenntarthatóság.
+    - Energiaipar, megújuló energia, hálózatfejlesztés, atomenergia, energiapiacok.
+    - Környezetvédelem, európai és magyar zöld szabályozások.
 
-    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető szöveg NÉLKÜL:
+    SZIGORÚAN TILTOTT TÉMÁK:
+    - Belpolitikai csatározások, általános pártpolitika, bűnügyi hírek, celeb/bulvár hírek.
+    - Bármilyen hír, ami nem közvetlenül energetikai, klíma vagy környezetvédelmi témájú.
+
+    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető vagy lezáró szöveg NÉLKÜL:
     <ul style='padding-left:20px;'>
         <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
         <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
@@ -266,9 +275,9 @@ def get_smart_climate_news():
         <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
     </ul>
 
-    Szabályok:
+    Rules:
     - Kizárólag az inputban megadott pontos URL-eket használd fel!
-    - Ne használj markdown kódtömböket vagy felvezető szöveget.
+    - Ne használj markdown kódtömböket.
     """
 
     try:
@@ -281,7 +290,7 @@ def get_smart_climate_news():
         return res.choices[0].message.content
     except Exception as e:
         print(f"Smart Climate Error: {e}")
-        return fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
+        return fetch_top_news(["https://www.portfolio.hu/rss/zoldvilag.xml"], 5)
 
 # --- INTELLIGENS SPORT HÍRGYŰJTŐ ÉS SZŰRŐ ---
 def get_smart_sports_news():
