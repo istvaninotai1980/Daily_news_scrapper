@@ -55,7 +55,6 @@ def get_fx_pair(currency):
     return 1.0, None
 
 def fetch_history_with_fallback(symbols):
-    """Végigpróbálja a szimbólumlistát, amíg nem talál érvényes adatot adó tickert."""
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym)
@@ -75,7 +74,6 @@ def build_portfolio_table():
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
                 
-                # Londoni penny / dollár korrekció
                 if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] == "USD":
                     curr_price = curr_price / 100.0
 
@@ -83,7 +81,6 @@ def build_portfolio_table():
                 weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
                 monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
                 
-                # Devizás BTD
                 hist_btd = hist.loc[hist.index >= item["buy_date"]]
                 if not hist_btd.empty:
                     buy_price = hist_btd['Close'].iloc[0]
@@ -94,7 +91,6 @@ def build_portfolio_table():
                     buy_price = curr_price
                     dev_btd_pct = monthly_pct
 
-                # Tényleges HUF BTD kiszámítása
                 curr_fx, fx_hist = get_fx_pair(item["currency"])
                 if fx_hist is not None and not fx_hist.empty:
                     fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
@@ -146,7 +142,7 @@ def build_portfolio_table():
     </table>
     """
 
-# --- GOLYÓÁLLÓ GAZDASÁGI HÍRGYŰJTŐ & TOP 3 ELEMZŐ ---
+# --- TOP 3 ALPHA FOCUS GAZDASÁGI ELEMZÉS ---
 def get_quant_summary():
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -216,6 +212,70 @@ def get_quant_summary():
         print(f"OpenAI hiba: {e}")
         return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
+# --- INTELLIGENS SPORT HÍRGYŰJTŐ ÉS SZŰRŐ ---
+def get_smart_sports_news():
+    api_key = os.environ.get("OPENAI_API_KEY")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    sport_feeds = [
+        "https://hvg.hu/rss/sport",
+        "https://telex.hu/rss/sport",
+        "https://index.hu/24ora/rss/?f=sport"
+    ]
+    
+    raw_sports = []
+    for f in sport_feeds:
+        try:
+            resp = requests.get(f, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.content)
+                for entry in parsed.entries[:10]:
+                    title = getattr(entry, 'title', '').strip()
+                    link = getattr(entry, 'link', '').strip()
+                    if title and link:
+                        raw_sports.append(f"Cím: {title}\nURL: {link}")
+        except Exception:
+            continue
+
+    if not raw_sports:
+        return fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
+
+    if not api_key:
+        return fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
+
+    prompt = """
+    Te egy intelligens sportújságíró asszisztens vagy. 
+    A megadott nyers sport hírek közül válogasd ki a legfontosabb maximum 5-7 darab hírt, amelyek megfelelnek az alábbi preferenciáknak:
+    1. Világversenyek magyar vonatkozású eredményei (magyar sportolók, csapatok szereplése).
+    2. Bajnokok Ligája hírek és eredmények.
+    3. Premier League hírek, különösen a LIVERPOOL eredményei és történései.
+    4. Forma–1 (F1) hírek, futameredmények, időmérők.
+
+    Kimeneti formátum: Kérlek, szigorúan tisztán HTML lista elemeket (`<ul style='padding-left:20px;'>...</ul>`) adj vissza!
+    Formátum minden elemre:
+    <li style='margin-bottom:8px;'>
+        <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a>
+    </li>
+
+    Szabályok:
+    - Kizárólag az inputban megadott pontos URL-eket használd fel.
+    - Csak a kért témákhoz illeszkedő híreket válogasd be. Ha kevés a specifikus hír, válaszd ki a legfontosabb általános sporthíreket.
+    - Ne írj szöveges felvezetőt, csak a HTML `<ul>...</ul>` struktúrát add vissza.
+    """
+
+    try:
+        local_client = OpenAI(api_key=api_key)
+        res = local_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n\n".join(raw_sports)}],
+            temperature=0.2
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        print(f"Smart Sports Error: {e}")
+        return fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
+
+# --- ÁLTALÁNOS ROVAT HÍREK ---
 def fetch_top_news(feed_urls, limit=5):
     items = []
     seen_titles = set()
@@ -248,7 +308,7 @@ def build_newsletter():
     kulfold = fetch_top_news(["https://hvg.hu/rss/vilag", "https://telex.hu/rss/kulfold"], 5)
     tech = fetch_top_news(["https://hvg.hu/rss/tudomany", "https://telex.hu/rss/tech"], 5)
     klima = fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
-    sport = fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
+    sport = get_smart_sports_news()
 
     return f"""
     <!DOCTYPE html>
@@ -264,7 +324,7 @@ def build_newsletter():
         <h3>🌍 Külföld (Top 5)</h3>{kulfold}
         <h3>💻 Tudomány & Tech (Top 5)</h3>{tech}
         <h3>🌱 Klíma & Zöld (Top 5)</h3>{klima}
-        <h3>⚽ Sport (Top 5)</h3>{sport}
+        <h3>⚽ Sport (Intelligens válogatás)</h3>{sport}
     </body>
     </html>
     """
