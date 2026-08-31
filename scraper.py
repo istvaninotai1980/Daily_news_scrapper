@@ -41,20 +41,52 @@ def format_pct(val):
     sign = "+" if val >= 0 else ""
     return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold;'>{sign}{val:.2f}%</td>"
 
+def get_fx_change(currency, buy_date):
+    if currency == 'HUF':
+        return 0.0
+    symbol_map = {'USD': 'USDHUF=X', 'EUR': 'EURHUF=X', 'CAD': 'CADHUF=X', 'GBP': 'GBPHUF=X'}
+    fx_symbol = symbol_map.get(currency)
+    if not fx_symbol:
+        return 0.0
+    try:
+        fx = yf.Ticker(fx_symbol)
+        hist = fx.history(start=buy_date)
+        if len(hist) >= 2:
+            start_fx = hist['Close'].iloc[0]
+            curr_fx = hist['Close'].iloc[-1]
+            return ((curr_fx - start_fx) / start_fx) * 100
+    except Exception as e:
+        print(f"FX hiba ({currency}): {e}")
+    return 0.0
+
 def build_portfolio_table():
     rows_html = ""
     for item in PORTFOLIO:
         try:
             ticker = yf.Ticker(item["symbol"])
             hist = ticker.history(period="3mo")
+            
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
                 currency = ticker.info.get('currency', 'USD')
                 
+                # Árfolyam elmozdulások az alapeszközben
                 daily_pct = ((curr_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
                 weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0.0
                 monthly_pct = ((curr_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100
                 
+                # BTD Devizás hozam (a vásárlás napjától számítva)
+                hist_btd = ticker.history(start=item["buy_date"])
+                if not hist_btd.empty:
+                    buy_price = hist_btd['Close'].iloc[0]
+                    dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100
+                else:
+                    dev_btd_pct = monthly_pct
+
+                # FX elmozdulás és HUF BTD % kiszámítása
+                fx_pct = get_fx_change(currency, item["buy_date"])
+                huf_btd_pct = ((1 + dev_btd_pct / 100) * (1 + fx_pct / 100) - 1) * 100
+
                 rows_html += f"""
                 <tr>
                     <td style="padding:8px; font-weight:bold;">{item['name']}</td>
@@ -63,13 +95,14 @@ def build_portfolio_table():
                     {format_pct(daily_pct)}
                     {format_pct(weekly_pct)}
                     {format_pct(monthly_pct)}
-                    {format_pct(monthly_pct)}
-                    {format_pct(monthly_pct)}
+                    {format_pct(dev_btd_pct)}
+                    {format_pct(huf_btd_pct)}
                 </tr>
                 """
             else:
                 rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
-        except Exception:
+        except Exception as e:
+            print(f"Hiba a {item['name']} feldolgozásakor: {e}")
             rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
 
     return f"""
