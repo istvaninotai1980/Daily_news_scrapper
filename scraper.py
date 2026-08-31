@@ -35,8 +35,8 @@ PORTFOLIO = [
 ]
 
 def format_pct(val):
-    if pd.isna(val):
-        return "<td style='padding:8px; text-align:center;'>Adatfrissítés alatt</td>"
+    if pd.isna(val) or val is None:
+        return "<td style='padding:8px; text-align:center;'>N/A</td>"
     color = "green" if val >= 0 else "red"
     sign = "+" if val >= 0 else ""
     return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold;'>{sign}{val:.2f}%</td>"
@@ -46,7 +46,7 @@ def build_portfolio_table():
     for item in PORTFOLIO:
         try:
             ticker = yf.Ticker(item["symbol"])
-            hist = ticker.history(period="1mo")
+            hist = ticker.history(period="3mo")
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
                 currency = ticker.info.get('currency', 'USD')
@@ -92,22 +92,32 @@ def build_portfolio_table():
     </table>
     """
 
-# --- KVANTITATÍV TOP 3 ELEMZÉS ---
+# --- GARANTÁLT TOP 3 GAZDASÁGI ELEMZÉS ---
 def get_quant_summary():
     raw_news = []
-    feeds = ["https://www.portfolio.hu/rss/all.xml", "https://hvg.hu/rss/gazdasag"]
+    feeds = [
+        "https://www.portfolio.hu/rss/all.xml",
+        "https://hvg.hu/rss/gazdasag",
+        "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
+    ]
     for f in feeds:
-        parsed = feedparser.parse(f)
-        for e in parsed.entries[:6]:
-            raw_news.append(f"- Cím: {e.title}\n  Link: {e.link}")
-            
-    if not client or not raw_news:
-        return "<p>Tőzsdei elemzés átmenetileg nem elérhető.</p>"
+        try:
+            parsed = feedparser.parse(f)
+            for e in parsed.entries[:8]:
+                raw_news.append(f"- Cím: {e.title}\n  Link: {e.link}")
+        except Exception:
+            continue
+
+    if not raw_news:
+        raw_news.append("- Cím: Globális piaci makrogazdasági változások\n  Link: https://www.bloomberg.com")
+
+    if not client:
+        return "<p>API kulcs hiányzik az elemzéshez.</p>"
 
     prompt = """
     Act as a senior quantitative equity analyst and financial journalist. 
     Filter raw news and generate a concentrated news summary containing exactly the TOP 3 most credible, market-moving stories.
-    Format as HTML:
+    Format strictly as HTML:
     <div style='margin-bottom:15px; padding:10px; border-left:4px solid #1976d2; background:#f8f9fa;'>
         <h4 style='margin:0; color:#0d47a1;'>[Sorszám]. 📈 [Cím]</h4>
         <p><b>A hír lényege (Signal):</b> [1-2 mondat]</p>
@@ -124,9 +134,9 @@ def get_quant_summary():
         )
         return res.choices[0].message.content
     except Exception as e:
-        return f"<p>Hiba az elemzéskor: {e}</p>"
+        return f"<p>Hiba az elemzés generálása során: {e}</p>"
 
-# --- EGYEDI ROVAT FEED-EK ---
+# --- ROVAT HÍREK ---
 def fetch_top_news(feed_urls, limit=5):
     items = []
     seen_titles = set()
@@ -148,12 +158,11 @@ def fetch_top_news(feed_urls, limit=5):
 
     return f"<ul style='padding-left:20px;'>{''.join(items)}</ul>" if items else "<p>Nincs elérhető hír.</p>"
 
-# --- TELJES HTML ÖSSZEÁLLÍTÁS ---
+# --- BUILD & SEND ---
 def build_newsletter():
     portfolio_table = build_portfolio_table()
     quant_analysis = get_quant_summary()
     
-    # Dedikált, tiszta RSS források rovatok szerint
     belfold = fetch_top_news(["https://hvg.hu/rss/itthon", "https://telex.hu/rss/belfold"], 5)
     kulfold = fetch_top_news(["https://hvg.hu/rss/vilag", "https://telex.hu/rss/kulfold"], 5)
     tech = fetch_top_news(["https://hvg.hu/rss/tudomany", "https://telex.hu/rss/tech"], 5)
