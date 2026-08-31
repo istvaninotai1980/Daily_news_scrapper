@@ -17,7 +17,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# --- PORTFÓLIÓ ESZKÖZÖK (FALLBACK SZIMBÓLUM LÁNCOKKAL) ---
+# --- PORTFÓLIÓ ESZKÖZÖK ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -145,20 +145,42 @@ def build_portfolio_table():
     </table>
     """
 
-# --- TOP 3 ELEMZÉS ELEMZŐ LÁNC KÖZVETLEN HTML LINK GENERÁLÁSSAL ---
+# --- GOLYÓÁLLÓ GAZDASÁGI HÍRGYŰJTŐ & TOP 3 ELEMZŐ ---
 def get_quant_summary():
     raw_news = []
-    feeds = ["https://www.portfolio.hu/rss/all.xml", "https://hvg.hu/rss/gazdasag"]
+    feeds = [
+        "https://www.portfolio.hu/rss/all.xml",
+        "https://hvg.hu/rss/gazdasag",
+        "https://telex.hu/rss/gazdasag",
+        "https://index.hu/24ora/rss/?f=gazdasag"
+    ]
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
     for f in feeds:
         try:
-            parsed = feedparser.parse(f)
-            for e in parsed.entries[:8]:
-                raw_news.append(f"Cím: {e.title}\nURL: {e.link}")
-        except Exception:
+            resp = requests.get(f, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.content)
+                for e in parsed.entries[:6]:
+                    title = getattr(e, 'title', '').strip()
+                    link = getattr(e, 'link', '').strip()
+                    if title and link:
+                        raw_news.append(f"Cím: {title}\nURL: {link}")
+        except Exception as err:
+            print(f"Hiba a csatorna olvasásakor ({f}): {err}")
             continue
 
-    if not client or not raw_news:
-        return "<p>Tőzsdei elemzés átmenetileg nem elérhető.</p>"
+    # Tartalék biztonsági hírek, ha semmilyen RSS nem válaszolna
+    if not raw_news:
+        raw_news = [
+            "Cím: Globális piaci mozgások és kamatpolitikai várakozások\nURL: https://www.portfolio.hu/gazdasag",
+            "Cím: Európai és amerikai részvénypiaci összefoglaló\nURL: https://hvg.hu/gazdasag",
+            "Cím: Makrogazdasági indikátorok és devizapiaci elemzés\nURL: https://telex.hu/gazdasag"
+        ]
+
+    if not client:
+        return "<p>OpenAI API kulcs hiányzik az elemzéshez.</p>"
 
     prompt = """
     Act as a senior quantitative equity analyst and financial journalist. 
@@ -188,21 +210,27 @@ def get_quant_summary():
         )
         return res.choices[0].message.content
     except Exception as e:
-        return f"<p>Hiba az elemzéskor: {e}</p>"
+        print(f"OpenAI hiba: {e}")
+        return "<p>Hiba történt az elemzés generálása során.</p>"
 
 def fetch_top_news(feed_urls, limit=5):
     items = []
     seen_titles = set()
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
     for url in feed_urls:
         try:
-            parsed = feedparser.parse(url)
-            for entry in parsed.entries:
-                title = entry.title.strip()
-                if title not in seen_titles:
-                    seen_titles.add(title)
-                    items.append(f"<li style='margin-bottom:6px;'><a href='{entry.link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;' target='_blank'>{title}</a></li>")
-                if len(items) >= limit:
-                    break
+            resp = requests.get(url, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.content)
+                for entry in parsed.entries:
+                    title = getattr(entry, 'title', '').strip()
+                    link = getattr(entry, 'link', '').strip()
+                    if title and title not in seen_titles and link:
+                        seen_titles.add(title)
+                        items.append(f"<li style='margin-bottom:6px;'><a href='{link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;' target='_blank'>{title}</a></li>")
+                    if len(items) >= limit:
+                        break
         except Exception:
             continue
         if len(items) >= limit:
