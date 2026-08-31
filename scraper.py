@@ -17,21 +17,21 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# --- PORTFÓLIÓ ESZKÖZÖK (BALANSZ) ---
+# --- PORTFÓLIÓ ESZKÖZÖK (IBKR TBSZ-2025 PONTOS ADATOK ALAPJÁN) ---
 PORTFOLIO = [
-    {"name": "Broadcom (AVGO)", "symbol": "AVGO", "buy_date": "2026-08-28"},
-    {"name": "Nvidia IBIS (NVD)", "symbol": "NVD.DE", "buy_date": "2026-08-28"},
-    {"name": "Amazon (AMZ)", "symbol": "AMZN", "buy_date": "2026-07-29"},
-    {"name": "TSMC (TSM)", "symbol": "TSM", "buy_date": "2026-07-28"},
-    {"name": "Microsoft (MSF)", "symbol": "MSFT", "buy_date": "2026-04-16"},
-    {"name": "OTP Bank (OTP)", "symbol": "OTP.BD", "buy_date": "2026-03-06"},
-    {"name": "Physical Silver (ISLN)", "symbol": "ISLN.L", "buy_date": "2026-03-06"},
-    {"name": "Constellation Software (CSU)", "symbol": "CSU.TO", "buy_date": "2026-01-28"},
-    {"name": "Defence ETF (ARMY)", "symbol": "ARMY.L", "buy_date": "2026-01-19"},
-    {"name": "S&P 500 Info Tech (QDV5)", "symbol": "QDV5.DE", "buy_date": "2026-01-19"},
-    {"name": "Copper ETF (COPG)", "symbol": "COPG.L", "buy_date": "2026-01-19"},
-    {"name": "Global Growth ETF (GGRW)", "symbol": "GGRW.L", "buy_date": "2026-01-15"},
-    {"name": "S&P 500 ETF (VUSA)", "symbol": "VUSA.L", "buy_date": "2026-01-15"}
+    {"name": "Broadcom (AVGO)", "symbol": "AVGO", "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
+    {"name": "Nvidia IBIS (NVD)", "symbol": "NVD.DE", "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
+    {"name": "Amazon (AMZ)", "symbol": "AMZN", "pos": 1.4759, "currency": "USD", "buy_date": "2026-07-29"},
+    {"name": "TSMC (TSM)", "symbol": "TSM", "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28"},
+    {"name": "Microsoft (MSF)", "symbol": "MSFT", "pos": 1.4114, "currency": "USD", "buy_date": "2026-04-16"},
+    {"name": "OTP Bank (OTP)", "symbol": "OTP.BD", "pos": 2.0, "currency": "HUF", "buy_date": "2026-03-06"},
+    {"name": "Physical Silver (ISLN)", "symbol": "ISLN.L", "pos": 3.7478, "currency": "USD", "buy_date": "2026-03-06"},
+    {"name": "Constellation Software (CSU)", "symbol": "CSU.TO", "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28"},
+    {"name": "Defence ETF (ARMY)", "symbol": "ARMY.L", "pos": 46.0, "currency": "USD", "buy_date": "2026-01-19"},
+    {"name": "S&P 500 Info Tech (QDV5)", "symbol": "QDV5.DE", "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19"},
+    {"name": "Copper ETF (COPG)", "symbol": "COPG.L", "pos": 9.548, "currency": "USD", "buy_date": "2026-01-19"},
+    {"name": "Global Growth ETF (GGRW)", "symbol": "GGRW.L", "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15"},
+    {"name": "S&P 500 ETF (VUSA)", "symbol": "VUSA.L", "pos": 4.5854, "currency": "USD", "buy_date": "2026-01-15"}
 ]
 
 def format_pct(val):
@@ -41,36 +41,22 @@ def format_pct(val):
     sign = "+" if val >= 0 else ""
     return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold;'>{sign}{val:.2f}%</td>"
 
-def get_fx_rate_on_date_or_latest(fx_symbol, target_date):
-    """
-    Lekéri a devizapár záróárfolyamát a megadott dátumon vagy az ahhoz legközelebbi korábbi kereskedési napon.
-    """
-    try:
-        fx = yf.Ticker(fx_symbol)
-        hist = fx.history(start=target_date)
-        if not hist.empty:
-            return hist['Close'].iloc[0], hist['Close'].iloc[-1]
-    except Exception as e:
-        print(f"Hiba az FX lekeresekor ({fx_symbol}): {e}")
-    return None, None
-
-def get_fx_change(currency, buy_date):
+def get_fx_pair(currency):
     if currency == 'HUF':
-        return 0.0
-    symbol_map = {
-        'USD': 'USDHUF=X',
-        'EUR': 'EURHUF=X',
-        'CAD': 'CADHUF=X',
-        'GBP': 'GBPHUF=X'
-    }
+        return 1.0, 1.0
+    symbol_map = {'USD': 'USDHUF=X', 'EUR': 'EURHUF=X', 'CAD': 'CADHUF=X'}
     fx_symbol = symbol_map.get(currency)
     if not fx_symbol:
-        return 0.0
-
-    start_fx, curr_fx = get_fx_rate_on_date_or_latest(fx_symbol, buy_date)
-    if start_fx and curr_fx and start_fx > 0:
-        return ((curr_fx - start_fx) / start_fx) * 100
-    return 0.0
+        return 1.0, 1.0
+    try:
+        fx = yf.Ticker(fx_symbol)
+        hist = fx.history(period="1y")
+        if not hist.empty:
+            curr_fx = hist['Close'].iloc[-1]
+            return curr_fx, hist
+    except Exception as e:
+        print(f"FX Error ({currency}): {e}")
+    return 1.0, None
 
 def build_portfolio_table():
     rows_html = ""
@@ -81,36 +67,46 @@ def build_portfolio_table():
             
             if not hist.empty and len(hist) >= 2:
                 curr_price = hist['Close'].iloc[-1]
-                currency = ticker.info.get('currency', 'USD')
-                if not currency or currency == 'GBp':  # Londoni pence korrekcio
-                    currency = 'GBP'
-                    if item["symbol"].endswith(".L"):
-                        curr_price = curr_price / 100.0
                 
-                # Árfolyam elmozdulások az alapeszközben
+                # Londoni penny / dollár korrekció
+                if item["symbol"].endswith(".L") and curr_price > 1000 and item["currency"] == "USD":
+                    curr_price = curr_price / 100.0
+
                 daily_pct = ((curr_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
                 weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else 0.0
                 monthly_pct = ((curr_price - hist['Close'].iloc[0]) / hist['Close'].iloc[0]) * 100
                 
-                # BTD Devizás hozam (a vásárlás napjától számítva)
+                # Devizás BTD
                 hist_btd = ticker.history(start=item["buy_date"])
                 if not hist_btd.empty:
                     buy_price = hist_btd['Close'].iloc[0]
-                    if item["symbol"].endswith(".L") and currency == 'GBP':
+                    if item["symbol"].endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
                         buy_price = buy_price / 100.0
                     dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100
                 else:
+                    buy_price = curr_price
                     dev_btd_pct = monthly_pct
 
-                # FX elmozdulás és pontos HUF BTD % kiszámítása
-                fx_pct = get_fx_change(currency, item["buy_date"])
-                huf_btd_pct = ((1 + dev_btd_pct / 100.0) * (1 + fx_pct / 100.0) - 1.0) * 100.0
+                # Tényleges HUF BTD kiszámítása az FX árfolyam-ingadozással
+                curr_fx, fx_hist = get_fx_pair(item["currency"])
+                if fx_hist is not None and not fx_hist.empty:
+                    # Megkeressük a vásárláshoz legközelebbi FX árfolyamot
+                    fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
+                    buy_fx = fx_btd['Close'].iloc[0] if not fx_btd.empty else curr_fx
+                else:
+                    buy_fx = 1.0
+                    curr_fx = 1.0
+
+                buy_val_huf = item["pos"] * buy_price * buy_fx
+                curr_val_huf = item["pos"] * curr_price * curr_fx
+                
+                huf_btd_pct = ((curr_val_huf - buy_val_huf) / buy_val_huf) * 100 if buy_val_huf > 0 else 0.0
 
                 rows_html += f"""
                 <tr>
                     <td style="padding:8px; font-weight:bold;">{item['name']}</td>
                     <td style="padding:8px; text-align:center;">{item['buy_date']}</td>
-                    <td style="padding:8px; text-align:center;">{curr_price:.2f} {currency}</td>
+                    <td style="padding:8px; text-align:center;">{curr_price:.2f} {item['currency']}</td>
                     {format_pct(daily_pct)}
                     {format_pct(weekly_pct)}
                     {format_pct(monthly_pct)}
@@ -121,7 +117,7 @@ def build_portfolio_table():
             else:
                 rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
         except Exception as e:
-            print(f"Hiba a {item['name']} feldolgozásakor: {e}")
+            print(f"Hiba {item['name']}: {e}")
             rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
 
     return f"""
@@ -144,27 +140,20 @@ def build_portfolio_table():
     </table>
     """
 
-# --- GARANTÁLT TOP 3 GAZDASÁGI ELEMZÉS ---
+# --- TOP 3 ELEMZÉS & HÍREK ---
 def get_quant_summary():
     raw_news = []
-    feeds = [
-        "https://www.portfolio.hu/rss/all.xml",
-        "https://hvg.hu/rss/gazdasag",
-        "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
-    ]
+    feeds = ["https://www.portfolio.hu/rss/all.xml", "https://hvg.hu/rss/gazdasag"]
     for f in feeds:
         try:
             parsed = feedparser.parse(f)
-            for e in parsed.entries[:8]:
+            for e in parsed.entries[:6]:
                 raw_news.append(f"- Cím: {e.title}\n  Link: {e.link}")
         except Exception:
             continue
 
-    if not raw_news:
-        raw_news.append("- Cím: Globális piaci makrogazdasági változások\n  Link: https://www.bloomberg.com")
-
-    if not client:
-        return "<p>API kulcs hiányzik az elemzéshez.</p>"
+    if not client or not raw_news:
+        return "<p>Tőzsdei elemzés átmenetileg nem elérhető.</p>"
 
     prompt = """
     Act as a senior quantitative equity analyst and financial journalist. 
@@ -186,13 +175,11 @@ def get_quant_summary():
         )
         return res.choices[0].message.content
     except Exception as e:
-        return f"<p>Hiba az elemzés generálása során: {e}</p>"
+        return f"<p>Hiba az elemzéskor: {e}</p>"
 
-# --- ROVAT HÍREK ---
 def fetch_top_news(feed_urls, limit=5):
     items = []
     seen_titles = set()
-    
     for url in feed_urls:
         try:
             parsed = feedparser.parse(url)
@@ -207,10 +194,8 @@ def fetch_top_news(feed_urls, limit=5):
             continue
         if len(items) >= limit:
             break
-
     return f"<ul style='padding-left:20px;'>{''.join(items)}</ul>" if items else "<p>Nincs elérhető hír.</p>"
 
-# --- BUILD & SEND ---
 def build_newsletter():
     portfolio_table = build_portfolio_table()
     quant_analysis = get_quant_summary()
@@ -221,38 +206,24 @@ def build_newsletter():
     klima = fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
     sport = fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
 
-    html = f"""
+    return f"""
     <!DOCTYPE html>
     <html>
     <body style="font-family:Arial, sans-serif; color:#333; padding:20px;">
         <h2>Balansz</h2>
         {portfolio_table}
-        
         <br><hr><br>
-        
         <h3>📈 TOP 3 Tőzsdei & Gazdasági Elemzés (Alpha Focus)</h3>
         {quant_analysis}
-        
         <br><hr><br>
-        
-        <h3>🇭🇺 Belföld (Top 5)</h3>
-        {belfold}
-        
-        <h3>🌍 Külföld (Top 5)</h3>
-        {kulfold}
-        
-        <h3>💻 Tudomány & Tech (Top 5)</h3>
-        {tech}
-        
-        <h3>🌱 Klíma & Zöld (Top 5)</h3>
-        {klima}
-        
-        <h3>⚽ Sport (Top 5)</h3>
-        {sport}
+        <h3>🇭🇺 Belföld (Top 5)</h3>{belfold}
+        <h3>🌍 Külföld (Top 5)</h3>{kulfold}
+        <h3>💻 Tudomány & Tech (Top 5)</h3>{tech}
+        <h3>🌱 Klíma & Zöld (Top 5)</h3>{klima}
+        <h3>⚽ Sport (Top 5)</h3>{sport}
     </body>
     </html>
     """
-    return html
 
 def send_email(html_content):
     msg = MIMEMultipart('alternative')
