@@ -212,12 +212,11 @@ def get_quant_summary():
         print(f"OpenAI hiba: {e}")
         return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
-# --- INTELLIGENS KLÍMA & ENERGIA SZŰRŐ ---
+# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ (KULCSSZÓ ÉS TÖBB-FORRÁS ALAPJÁN) ---
 def get_smart_climate_news():
     api_key = os.environ.get("OPENAI_API_KEY")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
-    # DEDIKÁLT SZAKMAI & HITELES KLÍMA/ENERGIA FORRÁSOK
     climate_feeds = [
         "https://www.portfolio.hu/rss/zoldvilag.xml",
         "https://g7.hu/category/zold/feed/",
@@ -226,16 +225,22 @@ def get_smart_climate_news():
         "https://hu.euronews.com/rss?format=xml&level=theme&name=green"
     ]
     
+    keywords = ["klíma", "klima", "energia", "környezet", "kornyezet", "zöld", "zold", "esg", "dekarbonizáció", "megújuló", "atom"]
     raw_climate = []
+
     for f in climate_feeds:
         try:
             resp = requests.get(f, headers=headers, timeout=8)
             if resp.status_code == 200:
                 parsed = feedparser.parse(resp.content)
-                for entry in parsed.entries[:10]:
+                for entry in parsed.entries[:12]:
                     title = getattr(entry, 'title', '').strip()
                     link = getattr(entry, 'link', '').strip()
-                    if title and link:
+                    summary = getattr(entry, 'summary', '').strip()
+                    full_text = f"{title} {summary}".lower()
+                    
+                    # Kulcsszó alapú előszűrés
+                    if any(kw in full_text for kw in keywords) and title and link:
                         raw_climate.append(f"Cím: {title}\nURL: {link}")
         except Exception:
             continue
@@ -244,17 +249,13 @@ def get_smart_climate_news():
         return fetch_top_news(["https://hvg.hu/rss/zold", "https://telex.hu/rss/zold"], 5)
 
     prompt = """
-    Te egy vezető energetikai és klímapolitikai szakértő/szerkesztő vagy. 
-    A megadott nyers hírekből válogass ki PONTOSAN 5 darab magas minőségű, objektív, szakmailag hiteles hírt.
+    Te egy vezető energetikai, környezetvédelmi és klímapolitikai szakértő/szerkesztő vagy. 
+    A megadott nyers hírekből válogass ki PONTOSAN 5 darab legmeghatározóbb, leghitelesebb és legolvasottabb hírt.
 
-    TÉMÁK ÉS PRIORITÁSOK:
-    1. Energiaátmenet, megújuló energiaforrások, hálózatfejlesztés, atomenergia, energiapiacok.
-    2. Klímagazdaság, ESG, dekarbonizáció, ipari fenntarthatóság, EU ETS szén-dioxid kvórák.
-    3. Európai és magyar vonatkozású klímapolitikai, szabályozási és környezetvédelmi döntések.
-
-    KISZŰRENDŐ:
-    - Kerüld a szenzációhajsza, kattintásvadász, alarmista vagy populista cikkeket!
-    - Kerüld a triviális, kis hatású életmódtippeket.
+    SZŰRÉSI ÉS PRIORITÁSI SZABÁLYOK:
+    1. KULCSSZAVAK: Fókuszálj a 'klíma', 'energia' és 'környezet' témakörök köré épülő szakmai hírekre.
+    2. TÖBB FORRÁS FEDETTSÉG: Előnyben kell részesítened azokat a témákat, amelyeket több független forrás is tárgyal, vagy kiemelt európai/magyar gazdasági hatással bírnak.
+    3. HITELESSÉG: Kerüld a szenzációhajsza, kattintásvadász, riogató cikkeket vagy az apró életmódtanácsokat.
 
     Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető szöveg NÉLKÜL:
     <ul style='padding-left:20px;'>
@@ -394,7 +395,7 @@ def build_newsletter():
         <h3>🇭🇺 Belföld (Top 5)</h3>{belfold}
         <h3>🌍 Külföld (Top 5)</h3>{kulfold}
         <h3>💻 Tudomány & Tech (Top 5)</h3>{tech}
-        <h3>🌱 Klíma, Energia & Zöld Gazdaság</h3>{klima}
+        <h3>🌱 Klíma, Energia & Környezet (Top 5)</h3>{klima}
         <h3>⚽ Sport (F1, Liverpool & Top Magyar)</h3>{sport}
     </body>
     </html>
