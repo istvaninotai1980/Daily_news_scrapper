@@ -1,53 +1,78 @@
-import requests
-from bs4 import BeautifulSoup
+import os
 import smtplib
+import requests
+import feedparser
+from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import os
-import openai  # Vagy ahogy a Gemini/OpenAI API-t hívod a projektedben
+from openai import OpenAI
+import yfinance as yf
 
-# --- BEÁLLÍTÁSOK ---
+# --- BEÁLLÍTÁSOK & SECRETS ---
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") # Vagy a használt LLM kulcsa
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+# --- 1. FRISS PIACI ADATOK LEKÉRÉSE (YFINANCE) ---
+def fetch_market_tickers():
+    tickers = {
+        "S&P 500": "^GSPC",
+        "NASDAQ": "^IXIC",
+        "BUX": "^BUX",
+        "EUR/HUF": "EURHUF=X"
+    }
+    summary = []
+    for name, symbol in tickers.items():
+        try:
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(period="2d")
+            if len(data) >= 2:
+                prev_close = data['Close'].iloc[-2]
+                curr_close = data['Close'].iloc[-1]
+                pct_change = ((curr_close - prev_close) / prev_close) * 100
+                summary.append(f"{name}: {curr_close:.2f} ({pct_change:+.2f}%)")
+        except Exception as e:
+            print(f"Hiba a {name} lekérésénél: {e}")
+    return " | ".join(summary) if summary else "Piac-specifikus adatok átmenetileg nem elérhetők."
+
+# --- 2. MULTI-FEED TŐZSDEI HÍRGYŰJTŐ ---
 def fetch_raw_financial_news():
-    """
-    Ide gyűjtöd be a nyers cikkeket és linkeket a Portfolio-ról vagy más forrásokból.
-    Példaként egy listát hozunk létre (cím + URL párokkal).
-    """
     raw_news = []
+    # Több megbízható forrás, ha valamelyik kiesne
+    feed_urls = [
+        "https://www.portfolio.hu/rss/all.xml",
+        "https://hvg.hu/rss/gazdasag",
+        "https://index.hu/24ora/rss/?f=gazdasag"
+    ]
     
-    # Példa scraping logika (cseréld le a saját hírgyűjtő rutinodra)
-    url = "https://www.portfolio.hu/uzlet"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            # Példa szelektálás (igazítsd a Portfolio aktuális DOM struktúrájához)
-            articles = soup.select("a.article-title, div.article-card h3 a")
-            
-            for art in articles[:15]: # Az első 15 nyers hír vizsgálata
-                title = art.text.strip()
-                link = art.get("href", "")
-                if link and not link.startswith("http"):
-                    link = "https://www.portfolio.hu" + link
-                if title and link:
-                    raw_news.append(f"- Cím: {title}\n  Forrás URL: {link}")
-    except Exception as e:
-        print(f"Hiba a hírek letöltésekor: {e}")
-        
-    return "\n".join(raw_news)
+    for feed_url in feed_urls:
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:8]:
+                title = entry.title.strip()
+                link = entry.link.strip()
+                summary = getattr(entry, 'summary', '')
+                clean_summary = BeautifulSoup(summary, "html.parser").text.strip() if summary else ""
+                
+                # Kizárjuk a duplikációkat
+                if not any(link in item for item in raw_news):
+                    raw_news.append(f"- Cím: {title}\n  Részletek: {clean_summary[:200]}\n  URL: {link}")
+        except Exception as e:
+            print(f"Hiba a forrás olvasásakor ({feed_url}): {e}")
 
-def generate_quantitative_summary(raw_news_text):
-    """
-    Lefuttatja a kvantitatív elemző promptot a nyers híreken az LLM segítségével.
-    """
-    if not raw_news_text:
-        return "Nem érkeztek elegendő nyers adatok a mai elemzéshez."
+    # Ha valamiért mégis üres lenne, adjunk át egy biztonsági szöveget
+    if not raw_news:
+        raw_news.append("- Cím: Global Market Movement Summary\n  Részletek: Macroeconomic policy and market shifts.\n  URL: https://www.bloomberg.com")
+
+    return "\n\n".join(raw_news[:20])
+
+# --- 3. KVANTITATÍV PIACI ELEMZÉS (OPENAI PROMPT) ---
+def get_quant_market_summary(raw_news_text, market_data):
+    if not client:
+        return "Az API kulcs hiányzik a tőzsdei elemzés generálásához."
 
     system_prompt = (
         "Act as a senior quantitative equity analyst and financial journalist. "
@@ -71,24 +96,46 @@ def generate_quantitative_summary(raw_news_text):
         "- Language of the output: Hungarian."
     )
 
-    user_content = f"Please review the following raw news/text:\n\n{raw_news_text}"
+    user_content = f"Aktuális piaci mutatók:\n{market_data}\n\nNyers hírek:\n{raw_news_text}"
 
     try:
-        # Példa OpenAI hívásra (ha Gemini/más API-t használsz, cseréld le a hívási struktúrát)
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
-            model="gpt-4o", # Vagy a kedvenc modellod
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
             ],
-            temperature=0.2 # Alacsony hőmérséklet a klinikai, objektív stílushoz
+            temperature=0.2
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Hiba az LLM hívása során: {e}")
-        return f"Hiba történt az elemzés generálásakor: {e}"
+        print(f"LLM hiba: {e}")
+        return "Hiba történt a tőzsdei elemzés generálása során."
 
+# --- 4. HÍRLEVÉL ÖSSZEÁLLÍTÁSA ---
+def build_full_newsletter():
+    print("Piaci mutatók és hírek gyűjtése...")
+    market_tickers = fetch_market_tickers()
+    raw_news = fetch_raw_financial_news()
+    quant_summary = get_quant_market_summary(raw_news, market_tickers)
+
+    newsletter_body = f"""# 📰 Napi Automatizált Hírlevél
+
+## 📊 Friss Piaci Mutatók
+`{market_tickers}`
+
+---
+
+## 📈 TOP 3 Tőzsdei & Gazdasági Elemzés (Alpha Focus)
+
+{quant_summary}
+
+---
+*A hírlevél automatikusan frissült a GitHub Actions segítségével.*
+"""
+    return newsletter_body
+
+# --- 5. E-MAIL KÜLDÉS ---
 def send_email(content):
     if not content:
         return
@@ -96,8 +143,8 @@ def send_email(content):
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
     msg['To'] = RECEIVER_EMAIL
-    msg['Subject'] = "Napi Kvantitatív Piaci Elemzés (Top 3 Alpha)"
-    msg.attach(MIMEText(content, 'plain', 'utf-8'))
+    msg['Subject'] = "Napi Kvantitatív Piaci Összefoglaló"
+    msg.attach(MIMEText(content, 'markdown', 'utf-8'))
 
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -105,11 +152,10 @@ def send_email(content):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
-        print("Napi elemzés e-mailben sikeresen elküldve!")
+        print("E-mail sikeresen elküldve!")
     except Exception as e:
         print(f"Hiba az e-mail küldésekor: {e}")
 
 if __name__ == "__main__":
-    raw_data = fetch_raw_financial_news()
-    market_summary = generate_quantitative_summary(raw_data)
-    send_email(market_summary)
+    full_content = build_full_newsletter()
+    send_email(full_content)
