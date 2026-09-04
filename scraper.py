@@ -47,20 +47,23 @@ def get_fx_pair(currency):
         return 1.0, None
     try:
         fx = yf.Ticker(fx_symbol)
-        hist = fx.history(period="1y")
-        if not hist.empty:
-            return hist['Close'].iloc[-1], hist
+        for p in ["1y", "1mo", "5d"]:
+            hist = fx.history(period=p)
+            if not hist.empty:
+                return hist['Close'].iloc[-1], hist
     except Exception as e:
         print(f"FX Error ({currency}): {e}")
     return 1.0, None
 
 def fetch_history_with_fallback(symbols):
+    """Végigpróbálja a szimbólumokat és a periódustartományokat (1y, 1mo, 5d) az adatvesztés elkerülésére."""
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym)
-            hist = ticker.history(period="1y")
-            if not hist.empty and len(hist) >= 2 and not pd.isna(hist['Close'].iloc[-1]):
-                return hist, sym
+            for p in ["1y", "1mo", "5d"]:
+                hist = ticker.history(period=p)
+                if not hist.empty and len(hist) >= 2 and not pd.isna(hist['Close'].iloc[-1]):
+                    return hist, sym
         except Exception:
             continue
     return pd.DataFrame(), None
@@ -212,7 +215,7 @@ def get_quant_summary():
         print(f"OpenAI hiba: {e}")
         return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
 
-# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ (GARANTÁLT 5 HÍR) ---
+# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ ---
 def get_smart_climate_news():
     api_key = os.environ.get("OPENAI_API_KEY")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -234,7 +237,7 @@ def get_smart_climate_news():
             resp = requests.get(f, headers=headers, timeout=8)
             if resp.status_code == 200:
                 parsed = feedparser.parse(resp.content)
-                for entry in parsed.entries[:25]:  # Bővített 25-ös merítés csatornánként
+                for entry in parsed.entries[:25]:
                     title = getattr(entry, 'title', '').strip()
                     link = getattr(entry, 'link', '').strip()
                     summary = getattr(entry, 'summary', '').strip()
