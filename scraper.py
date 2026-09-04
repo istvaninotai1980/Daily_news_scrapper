@@ -14,19 +14,22 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK ---
+# --- PORTFÓLIÓ ESZKÖZÖK (PONTOS AMZ 1: 1.4759 ÉS AMZ 2: 1.5 DARABSZÁMOKKAL) ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
-    {"name": "Amazon (AMZ)", "symbols": ["AMZN"], "pos": 1.4759, "currency": "USD", "buy_date": "2026-07-29"},
+    {"name": "Amazon 1 (AMZ 1)", "symbols": ["AMZN"], "pos": 1.4759, "currency": "USD", "buy_date": "2026-07-29"},
+    {"name": "Amazon 2 (AMZ 2)", "symbols": ["AMZN"], "pos": 1.5, "currency": "USD", "buy_date": "2026-09-03"},
+    {"name": "Amazon Sum (AMZ Sum)", "symbols": ["AMZN"], "is_sum": True, "currency": "USD", "sub_items": [
+        {"pos": 1.4759, "buy_date": "2026-07-29"},
+        {"pos": 1.5, "buy_date": "2026-09-03"}
+    ]},
+    {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-03"},
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28"},
     {"name": "Microsoft (MSF)", "symbols": ["MSFT"], "pos": 1.4114, "currency": "USD", "buy_date": "2026-04-16"},
-    {"name": "OTP Bank (OTP)", "symbols": ["OTP.BD", "OTPK.DE"], "pos": 2.0, "currency": "HUF", "buy_date": "2026-03-06"},
     {"name": "Physical Silver (ISLN)", "symbols": ["PHAG.DE", "ISLN.L", "VZLC.DE", "SLVR"], "pos": 3.7478, "currency": "USD", "buy_date": "2026-03-06"},
     {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28"},
-    {"name": "Defence ETF (ARMY)", "symbols": ["ARMY.DE", "ARMY.L"], "pos": 46.0, "currency": "EUR", "buy_date": "2026-01-19"},
     {"name": "S&P 500 Info Tech (QDV5)", "symbols": ["QDV5.DE", "QDV5.L"], "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19"},
-    {"name": "Copper ETF (COPG)", "symbols": ["COPA.DE", "PCOP.DE", "COPG.L", "CPER"], "pos": 9.548, "currency": "USD", "buy_date": "2026-01-19"},
     {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRA.DE", "GGRW.L"], "pos": 15.0924, "currency": "EUR", "buy_date": "2026-01-15"},
     {"name": "S&P 500 ETF (VUSA)", "symbols": ["VUSA.DE", "VUSA.L"], "pos": 4.5854, "currency": "EUR", "buy_date": "2026-01-15"}
 ]
@@ -83,34 +86,68 @@ def build_portfolio_table():
                 daily_pct = ((curr_price - hist['Close'].iloc[-2]) / hist['Close'].iloc[-2]) * 100
                 weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
                 monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
-                
-                hist_btd = hist.loc[hist.index >= item["buy_date"]]
-                if not hist_btd.empty:
-                    buy_price = hist_btd['Close'].iloc[0]
-                    if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
-                        buy_price = buy_price / 100.0
-                    dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100
-                else:
-                    buy_price = curr_price
-                    dev_btd_pct = monthly_pct
 
                 curr_fx, fx_hist = get_fx_pair(item["currency"])
-                if fx_hist is not None and not fx_hist.empty:
-                    fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
-                    buy_fx = fx_btd['Close'].iloc[0] if not fx_btd.empty else curr_fx
-                else:
-                    buy_fx = 1.0
-                    curr_fx = 1.0
 
-                buy_val_huf = item["pos"] * buy_price * buy_fx
-                curr_val_huf = item["pos"] * curr_price * curr_fx
-                
-                huf_btd_pct = ((curr_val_huf - buy_val_huf) / buy_val_huf) * 100 if buy_val_huf > 0 else 0.0
+                # KÜLÖN LOGIKA AZ AGGREGÁLT (AMZ SUM) SORRA
+                if item.get("is_sum"):
+                    total_buy_val_dev = 0.0
+                    total_buy_val_huf = 0.0
+                    total_pos = 0.0
+
+                    for sub in item["sub_items"]:
+                        p_pos = sub["pos"]
+                        total_pos += p_pos
+                        hist_btd = hist.loc[hist.index >= sub["buy_date"]]
+                        buy_p = hist_btd['Close'].iloc[0] if not hist_btd.empty else curr_price
+                        
+                        if fx_hist is not None and not fx_hist.empty:
+                            fx_btd = fx_hist.loc[fx_hist.index >= sub["buy_date"]]
+                            buy_fx = fx_btd['Close'].iloc[0] if not fx_btd.empty else curr_fx
+                        else:
+                            buy_fx = 1.0
+
+                        total_buy_val_dev += p_pos * buy_p
+                        total_buy_val_huf += p_pos * buy_p * buy_fx
+
+                    total_curr_val_dev = total_pos * curr_price
+                    total_curr_val_huf = total_pos * curr_price * (curr_fx if curr_fx else 1.0)
+
+                    dev_btd_pct = ((total_curr_val_dev - total_buy_val_dev) / total_buy_val_dev) * 100 if total_buy_val_dev > 0 else 0.0
+                    huf_btd_pct = ((total_curr_val_huf - total_buy_val_huf) / total_buy_val_huf) * 100 if total_buy_val_huf > 0 else 0.0
+                    buy_date_str = "Aggregált"
+
+                else:
+                    hist_btd = hist.loc[hist.index >= item["buy_date"]]
+                    if not hist_btd.empty:
+                        buy_price = hist_btd['Close'].iloc[0]
+                        if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
+                            buy_price = buy_price / 100.0
+                        dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100
+                    else:
+                        buy_price = curr_price
+                        dev_btd_pct = monthly_pct
+
+                    if fx_hist is not None and not fx_hist.empty:
+                        fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
+                        buy_fx = fx_btd['Close'].iloc[0] if not fx_btd.empty else curr_fx
+                    else:
+                        buy_fx = 1.0
+                        curr_fx = 1.0
+
+                    buy_val_huf = item["pos"] * buy_price * buy_fx
+                    curr_val_huf = item["pos"] * curr_price * curr_fx
+                    
+                    huf_btd_pct = ((curr_val_huf - buy_val_huf) / buy_val_huf) * 100 if buy_val_huf > 0 else 0.0
+                    buy_date_str = item["buy_date"]
+
+                # HA A SOR SUM, KÜLÖN HÁTTÉRSZÍNNEL EMELJÜK KI
+                row_bg = "background-color:#e8f4f8;" if item.get("is_sum") else ""
 
                 rows_html += f"""
-                <tr>
+                <tr style="{row_bg}">
                     <td style="padding:8px; font-weight:bold;">{item['name']}</td>
-                    <td style="padding:8px; text-align:center;">{item['buy_date']}</td>
+                    <td style="padding:8px; text-align:center;">{buy_date_str}</td>
                     <td style="padding:8px; text-align:center;">{curr_price:.2f} {item['currency']}</td>
                     {format_pct(daily_pct)}
                     {format_pct(weekly_pct)}
@@ -120,10 +157,10 @@ def build_portfolio_table():
                 </tr>
                 """
             else:
-                rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
+                rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item.get('buy_date', 'N/A')}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
         except Exception as e:
             print(f"Hiba {item['name']}: {e}")
-            rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item['buy_date']}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
+            rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item.get('buy_date', 'N/A')}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
 
     return f"""
     <table border="1" style="border-collapse:collapse; width:100%; font-size:13px; font-family:sans-serif;">
