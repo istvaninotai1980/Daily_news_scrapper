@@ -14,7 +14,7 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (PONTOS AMZ 1: 1.4759 ÉS AMZ 2: 1.5 DARABSZÁMOKKAL) ---
+# --- PORTFÓLIÓ ESZKÖZÖK (MSF ÉS ISLN ELTÁVOLÍTVA) ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -26,8 +26,6 @@ PORTFOLIO = [
     ]},
     {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-03"},
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28"},
-    {"name": "Microsoft (MSF)", "symbols": ["MSFT"], "pos": 1.4114, "currency": "USD", "buy_date": "2026-04-16"},
-    {"name": "Physical Silver (ISLN)", "symbols": ["PHAG.DE", "ISLN.L", "VZLC.DE", "SLVR"], "pos": 3.7478, "currency": "USD", "buy_date": "2026-03-06"},
     {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28"},
     {"name": "S&P 500 Info Tech (QDV5)", "symbols": ["QDV5.DE", "QDV5.L"], "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19"},
     {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRA.DE", "GGRW.L"], "pos": 15.0924, "currency": "EUR", "buy_date": "2026-01-15"},
@@ -141,7 +139,6 @@ def build_portfolio_table():
                     huf_btd_pct = ((curr_val_huf - buy_val_huf) / buy_val_huf) * 100 if buy_val_huf > 0 else 0.0
                     buy_date_str = item["buy_date"]
 
-                # HA A SOR SUM, KÜLÖN HÁTTÉRSZÍNNEL EMELJÜK KI
                 row_bg = "background-color:#e8f4f8;" if item.get("is_sum") else ""
 
                 rows_html += f"""
