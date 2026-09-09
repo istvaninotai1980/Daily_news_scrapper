@@ -14,7 +14,10 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (ALPHABET HOZZÁADVA) ---
+# TELES BEFEKTETETT RÉSZVÉNYÉRTÉK A KÉPERNYŐKÉP ALAPJÁN (MKT VAL)
+TOTAL_MKT_VAL_HUF = 1719650.07
+
+# --- PORTFÓLIÓ ESZKÖZÖK ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -39,6 +42,11 @@ def format_pct(val):
     color = "green" if val >= 0 else "red"
     sign = "+" if val >= 0 else ""
     return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold;'>{sign}{val:.2f}%</td>"
+
+def format_weight(val):
+    if pd.isna(val) or val is None:
+        return "<td style='padding:8px; text-align:center;'>N/A</td>"
+    return f"<td style='padding:8px; text-align:center; font-weight:bold; color:#0d47a1;'>{val:.2f}%</td>"
 
 def get_fx_pair(currency):
     if currency == 'HUF':
@@ -87,11 +95,11 @@ def build_portfolio_table():
                 monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
 
                 curr_fx, fx_hist = get_fx_pair(item["currency"])
+                active_fx = curr_fx if curr_fx else 1.0
 
                 # KÜLÖN LOGIKA AZ AGGREGÁLT (AMZ SUM) SORRA
                 if item.get("is_sum"):
                     total_buy_val_dev = 0.0
-                    total_buy_val_huf = 0.0
                     total_pos = 0.0
 
                     for sub in item["sub_items"]:
@@ -99,21 +107,14 @@ def build_portfolio_table():
                         total_pos += p_pos
                         hist_btd = hist.loc[hist.index >= sub["buy_date"]]
                         buy_p = hist_btd['Close'].iloc[0] if not hist_btd.empty else curr_price
-                        
-                        if fx_hist is not None and not fx_hist.empty:
-                            fx_btd = fx_hist.loc[fx_hist.index >= sub["buy_date"]]
-                            buy_fx = fx_btd['Close'].iloc[0] if not fx_btd.empty else curr_fx
-                        else:
-                            buy_fx = 1.0
-
                         total_buy_val_dev += p_pos * buy_p
-                        total_buy_val_huf += p_pos * buy_p * buy_fx
 
                     total_curr_val_dev = total_pos * curr_price
-                    total_curr_val_huf = total_pos * curr_price * (curr_fx if curr_fx else 1.0)
-
                     dev_btd_pct = ((total_curr_val_dev - total_buy_val_dev) / total_buy_val_dev) * 100 if total_buy_val_dev > 0 else 0.0
-                    huf_btd_pct = ((total_curr_val_huf - total_buy_val_huf) / total_buy_val_huf) * 100 if total_buy_val_huf > 0 else 0.0
+                    
+                    # Súlyszámítás a teljes részvényértékhez képest
+                    pos_mkt_val_huf = total_pos * curr_price * active_fx
+                    weight_pct = (pos_mkt_val_huf / TOTAL_MKT_VAL_HUF) * 100
                     buy_date_str = "Aggregált"
 
                 else:
@@ -127,17 +128,9 @@ def build_portfolio_table():
                         buy_price = curr_price
                         dev_btd_pct = monthly_pct
 
-                    if fx_hist is not None and not fx_hist.empty:
-                        fx_btd = fx_hist.loc[fx_hist.index >= item["buy_date"]]
-                        buy_fx = fx_btd['Close'].iloc[0] if not fx_btd.empty else curr_fx
-                    else:
-                        buy_fx = 1.0
-                        curr_fx = 1.0
-
-                    buy_val_huf = item["pos"] * buy_price * buy_fx
-                    curr_val_huf = item["pos"] * curr_price * curr_fx
-                    
-                    huf_btd_pct = ((curr_val_huf - buy_val_huf) / buy_val_huf) * 100 if buy_val_huf > 0 else 0.0
+                    # Súlyszámítás a teljes részvényértékhez képest
+                    pos_mkt_val_huf = item["pos"] * curr_price * active_fx
+                    weight_pct = (pos_mkt_val_huf / TOTAL_MKT_VAL_HUF) * 100
                     buy_date_str = item["buy_date"]
 
                 row_bg = "background-color:#e8f4f8;" if item.get("is_sum") else ""
@@ -151,7 +144,7 @@ def build_portfolio_table():
                     {format_pct(weekly_pct)}
                     {format_pct(monthly_pct)}
                     {format_pct(dev_btd_pct)}
-                    {format_pct(huf_btd_pct)}
+                    {format_weight(weight_pct)}
                 </tr>
                 """
             else:
@@ -171,7 +164,7 @@ def build_portfolio_table():
                 <th style="padding:8px;">Heti %</th>
                 <th style="padding:8px;">Havi %</th>
                 <th style="padding:8px;">Devizás BTD %</th>
-                <th style="padding:8px;">HUF BTD %</th>
+                <th style="padding:8px;">Portfólió Súly %</th>
             </tr>
         </thead>
         <tbody>
