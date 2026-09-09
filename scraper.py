@@ -14,7 +14,7 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (MSF ÉS ISLN ELTÁVOLÍTVA) ---
+# --- PORTFÓLIÓ ESZKÖZÖK (ALPHABET HOZZÁADVA) ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
@@ -24,6 +24,7 @@ PORTFOLIO = [
         {"pos": 1.4759, "buy_date": "2026-07-29"},
         {"pos": 1.5, "buy_date": "2026-09-03"}
     ]},
+    {"name": "Alphabet (GOOGL)", "symbols": ["GOOGL", "GOOG"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-09"},
     {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-03"},
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28"},
     {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28"},
