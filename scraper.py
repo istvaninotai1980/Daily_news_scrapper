@@ -14,9 +14,15 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK ---
+# --- PORTFÓLIÓ ESZKÖZÖK (AVGO1, AVGO2, AVGO SUM ÉS AAPL HOZZÁADVA) ---
 PORTFOLIO = [
-    {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
+    {"name": "Broadcom 1 (AVGO 1)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
+    {"name": "Broadcom 2 (AVGO 2)", "symbols": ["AVGO"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-10", "buy_price_override": 363.10},
+    {"name": "Broadcom Sum (AVGO Sum)", "symbols": ["AVGO"], "is_sum": True, "currency": "USD", "sub_items": [
+        {"pos": 0.54, "buy_date": "2026-08-28"},
+        {"pos": 1.0, "buy_date": "2026-09-10", "buy_price_override": 363.10}
+    ]},
+    {"name": "Apple (AAPL)", "symbols": ["AAPL"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-10", "buy_price_override": 318.95},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
     {"name": "Amazon 1 (AMZ 1)", "symbols": ["AMZN"], "pos": 1.4759, "currency": "USD", "buy_date": "2026-07-29"},
     {"name": "Amazon 2 (AMZ 2)", "symbols": ["AMZN"], "pos": 1.5, "currency": "USD", "buy_date": "2026-09-03"},
@@ -95,7 +101,6 @@ def build_portfolio_table():
                 pos_mkt_val_huf = total_pos * curr_price * active_fx
             else:
                 pos_mkt_val_huf = item["pos"] * curr_price * active_fx
-                # Az egyedi tételeket adjuk hozzá a teljes értékhez (az aggregált Sum sort kivesszük a duplázás elkerülésére)
                 total_calculated_huf += pos_mkt_val_huf
 
             calc_data.append({
@@ -118,7 +123,7 @@ def build_portfolio_table():
                 "pos_mkt_val_huf": 0.0
             })
 
-    # 2. LÉPÉS: TÁBLÁZAT STRUKTÚRA FELÉPÍTÉSE A PONTOS SÚLYOKKAL
+    # 2. LÉPÉS: TÁBLÁZAT STRUKTÚRA FELÉPÍTÉSE
     rows_html = ""
     for data in calc_data:
         item = data["item"]
@@ -134,7 +139,6 @@ def build_portfolio_table():
             weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
             monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
 
-            # Súly pontos kiszámítása a mért forintértékek összegéhez képest
             weight_pct = (pos_mkt_val_huf / total_calculated_huf) * 100 if total_calculated_huf > 0 else 0.0
 
             if item.get("is_sum"):
@@ -144,8 +148,11 @@ def build_portfolio_table():
                 for sub in item["sub_items"]:
                     p_pos = sub["pos"]
                     total_pos += p_pos
-                    hist_btd = hist.loc[hist.index >= sub["buy_date"]]
-                    buy_p = hist_btd['Close'].iloc[0] if not hist_btd.empty else curr_price
+                    if sub.get("buy_price_override"):
+                        buy_p = sub["buy_price_override"]
+                    else:
+                        hist_btd = hist.loc[hist.index >= sub["buy_date"]]
+                        buy_p = hist_btd['Close'].iloc[0] if not hist_btd.empty else curr_price
                     total_buy_val_dev += p_pos * buy_p
 
                 total_curr_val_dev = total_pos * curr_price
@@ -153,16 +160,18 @@ def build_portfolio_table():
                 buy_date_str = "Aggregált"
 
             else:
-                hist_btd = hist.loc[hist.index >= item["buy_date"]]
-                if not hist_btd.empty:
-                    buy_price = hist_btd['Close'].iloc[0]
-                    if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
-                        buy_price = buy_price / 100.0
-                    dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100
+                if item.get("buy_price_override"):
+                    buy_price = item["buy_price_override"]
                 else:
-                    buy_price = curr_price
-                    dev_btd_pct = monthly_pct
+                    hist_btd = hist.loc[hist.index >= item["buy_date"]]
+                    if not hist_btd.empty:
+                        buy_price = hist_btd['Close'].iloc[0]
+                        if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
+                            buy_price = buy_price / 100.0
+                    else:
+                        buy_price = curr_price
 
+                dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
                 buy_date_str = item["buy_date"]
 
             row_bg = "background-color:#e8f4f8;" if item.get("is_sum") else ""
