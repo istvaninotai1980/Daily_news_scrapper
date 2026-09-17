@@ -24,7 +24,7 @@ PORTFOLIO = [
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28", "buy_price_override": 394.58},
     {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28", "buy_price_override": 2786.85},
     {"name": "S&P 500 Info Tech (QDV5)", "symbols": ["QDV5.DE", "QDV5.L"], "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19", "buy_price_override": 8.214},
-    {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRA.DE", "GGRW.L"], "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15", "buy_price_override": 40.0205},
+    {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRW.L", "GGRW"], "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15", "buy_price_override": 40.0205},
     {"name": "S&P 500 ETF (VUSA)", "symbols": ["VUSA.L", "VUSA.DE"], "pos": 4.5854, "currency": "GBP", "buy_date": "2026-01-15", "buy_price_override": 98.7901}
 ]
 
@@ -78,6 +78,8 @@ def build_portfolio_table():
         hist, used_symbol = fetch_history_with_fallback(item["symbols"])
         if not hist.empty and len(hist) >= 2:
             curr_price = hist['Close'].iloc[-1]
+            
+            # Londoni penny alapú árfolyamok igazítása GBP/USD esetén
             if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] in ["USD", "GBP"]:
                 curr_price = curr_price / 100.0
 
