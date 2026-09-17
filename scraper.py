@@ -14,28 +14,18 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (AAPL NÉLKÜL) ---
+# --- PORTFÓLIÓ ESZKÖZÖK PONTOS IBKR ÁTLAGÁRAKKAL ---
 PORTFOLIO = [
-    {"name": "Broadcom 1 (AVGO 1)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
-    {"name": "Broadcom 2 (AVGO 2)", "symbols": ["AVGO"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-10", "buy_price_override": 363.10},
-    {"name": "Broadcom Sum (AVGO Sum)", "symbols": ["AVGO"], "is_sum": True, "currency": "USD", "sub_items": [
-        {"pos": 0.54, "buy_date": "2026-08-28"},
-        {"pos": 1.0, "buy_date": "2026-09-10", "buy_price_override": 363.10}
-    ]},
-    {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
-    {"name": "Amazon 1 (AMZ 1)", "symbols": ["AMZN"], "pos": 1.4759, "currency": "USD", "buy_date": "2026-07-29"},
-    {"name": "Amazon 2 (AMZ 2)", "symbols": ["AMZN"], "pos": 1.5, "currency": "USD", "buy_date": "2026-09-03"},
-    {"name": "Amazon Sum (AMZ Sum)", "symbols": ["AMZN"], "is_sum": True, "currency": "USD", "sub_items": [
-        {"pos": 1.4759, "buy_date": "2026-07-29"},
-        {"pos": 1.5, "buy_date": "2026-09-03"}
-    ]},
-    {"name": "Alphabet (GOOGL)", "symbols": ["GOOGL", "GOOG"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-09"},
-    {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-03"},
-    {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28"},
-    {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28"},
-    {"name": "S&P 500 Info Tech (QDV5)", "symbols": ["QDV5.DE", "QDV5.L"], "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19"},
-    {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRA.DE", "GGRW.L"], "pos": 15.0924, "currency": "EUR", "buy_date": "2026-01-15"},
-    {"name": "S&P 500 ETF (VUSA)", "symbols": ["VUSA.DE", "VUSA.L"], "pos": 4.5854, "currency": "EUR", "buy_date": "2026-01-15"}
+    {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 1.54, "currency": "USD", "buy_date": "2026-08-28", "buy_price_override": 368.23},
+    {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28", "buy_price_override": 195.90},
+    {"name": "Amazon Sum (AMZ Sum)", "symbols": ["AMZ.DE", "AMZN"], "pos": 4.4759, "currency": "EUR", "buy_date": "2026-07-29", "buy_price_override": 216.47},
+    {"name": "Alphabet (GOOGL)", "symbols": ["GOOGL", "GOOG"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-09", "buy_price_override": 332.36},
+    {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-03", "buy_price_override": 605.75},
+    {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28", "buy_price_override": 394.58},
+    {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28", "buy_price_override": 2786.85},
+    {"name": "S&P 500 Info Tech (QDV5)", "symbols": ["QDV5.DE", "QDV5.L"], "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19", "buy_price_override": 8.214},
+    {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRA.DE", "GGRW.L"], "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15", "buy_price_override": 40.0205},
+    {"name": "S&P 500 ETF (VUSA)", "symbols": ["VUSA.L", "VUSA.DE"], "pos": 4.5854, "currency": "GBP", "buy_date": "2026-01-15", "buy_price_override": 98.7901}
 ]
 
 def format_pct(val):
@@ -53,7 +43,7 @@ def format_weight(val):
 def get_fx_pair(currency):
     if currency == 'HUF':
         return 1.0, None
-    symbol_map = {'USD': 'USDHUF=X', 'EUR': 'EURHUF=X', 'CAD': 'CADHUF=X'}
+    symbol_map = {'USD': 'USDHUF=X', 'EUR': 'EURHUF=X', 'CAD': 'CADHUF=X', 'GBP': 'GBPHUF=X'}
     fx_symbol = symbol_map.get(currency)
     if not fx_symbol:
         return 1.0, None
@@ -88,18 +78,14 @@ def build_portfolio_table():
         hist, used_symbol = fetch_history_with_fallback(item["symbols"])
         if not hist.empty and len(hist) >= 2:
             curr_price = hist['Close'].iloc[-1]
-            if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] == "USD":
+            if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] in ["USD", "GBP"]:
                 curr_price = curr_price / 100.0
 
             curr_fx, fx_hist = get_fx_pair(item["currency"])
             active_fx = curr_fx if curr_fx else 1.0
 
-            if item.get("is_sum"):
-                total_pos = sum(sub["pos"] for sub in item["sub_items"])
-                pos_mkt_val_huf = total_pos * curr_price * active_fx
-            else:
-                pos_mkt_val_huf = item["pos"] * curr_price * active_fx
-                total_calculated_huf += pos_mkt_val_huf
+            pos_mkt_val_huf = item["pos"] * curr_price * active_fx
+            total_calculated_huf += pos_mkt_val_huf
 
             calc_data.append({
                 "item": item,
@@ -128,7 +114,6 @@ def build_portfolio_table():
         used_symbol = data["used_symbol"]
         curr_price = data["curr_price"]
         curr_fx = data["curr_fx"]
-        fx_hist = data["fx_hist"]
         pos_mkt_val_huf = data["pos_mkt_val_huf"]
 
         if not hist.empty and len(hist) >= 2:
@@ -138,43 +123,22 @@ def build_portfolio_table():
 
             weight_pct = (pos_mkt_val_huf / total_calculated_huf) * 100 if total_calculated_huf > 0 else 0.0
 
-            if item.get("is_sum"):
-                total_buy_val_dev = 0.0
-                total_pos = 0.0
-
-                for sub in item["sub_items"]:
-                    p_pos = sub["pos"]
-                    total_pos += p_pos
-                    if sub.get("buy_price_override"):
-                        buy_p = sub["buy_price_override"]
-                    else:
-                        hist_btd = hist.loc[hist.index >= sub["buy_date"]]
-                        buy_p = hist_btd['Close'].iloc[0] if not hist_btd.empty else curr_price
-                    total_buy_val_dev += p_pos * buy_p
-
-                total_curr_val_dev = total_pos * curr_price
-                dev_btd_pct = ((total_curr_val_dev - total_buy_val_dev) / total_buy_val_dev) * 100 if total_buy_val_dev > 0 else 0.0
-                buy_date_str = "Aggregált"
-
+            if item.get("buy_price_override"):
+                buy_price = item["buy_price_override"]
             else:
-                if item.get("buy_price_override"):
-                    buy_price = item["buy_price_override"]
+                hist_btd = hist.loc[hist.index >= item["buy_date"]]
+                if not hist_btd.empty:
+                    buy_price = hist_btd['Close'].iloc[0]
+                    if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] in ["USD", "GBP"]:
+                        buy_price = buy_price / 100.0
                 else:
-                    hist_btd = hist.loc[hist.index >= item["buy_date"]]
-                    if not hist_btd.empty:
-                        buy_price = hist_btd['Close'].iloc[0]
-                        if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] == "USD":
-                            buy_price = buy_price / 100.0
-                    else:
-                        buy_price = curr_price
+                    buy_price = curr_price
 
-                dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
-                buy_date_str = item["buy_date"]
-
-            row_bg = "background-color:#e8f4f8;" if item.get("is_sum") else ""
+            dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
+            buy_date_str = item["buy_date"]
 
             rows_html += f"""
-            <tr style="{row_bg}">
+            <tr>
                 <td style="padding:8px; font-weight:bold;">{item['name']}</td>
                 <td style="padding:8px; text-align:center;">{buy_date_str}</td>
                 <td style="padding:8px; text-align:center;">{curr_price:.2f} {item['currency']}</td>
