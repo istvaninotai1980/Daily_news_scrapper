@@ -82,7 +82,6 @@ def fetch_history_with_fallback(symbols):
     return pd.DataFrame(), None
 
 def build_portfolio_table():
-    # 1. LÉPÉS: LEKÉRJÜK AZ ADATOKAT ÉS KISZÁMOLJUK A TELJES AKTUÁLIS PORTFÓLIÓÉRTÉKET FORINTBAN
     calc_data = []
     total_calculated_huf = 0.0
 
@@ -123,7 +122,6 @@ def build_portfolio_table():
                 "pos_mkt_val_huf": 0.0
             })
 
-    # 2. LÉPÉS: TÁBLÁZAT STRUKTÚRA FELÉPÍTÉSE
     rows_html = ""
     for data in calc_data:
         item = data["item"]
