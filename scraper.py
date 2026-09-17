@@ -14,7 +14,7 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (AVGO1, AVGO2, AVGO SUM ÉS AAPL HOZZÁADVA) ---
+# --- PORTFÓLIÓ ESZKÖZÖK (AAPL ELTÁVOLÍTVA) ---
 PORTFOLIO = [
     {"name": "Broadcom 1 (AVGO 1)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Broadcom 2 (AVGO 2)", "symbols": ["AVGO"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-10", "buy_price_override": 363.10},
@@ -22,7 +22,6 @@ PORTFOLIO = [
         {"pos": 0.54, "buy_date": "2026-08-28"},
         {"pos": 1.0, "buy_date": "2026-09-10", "buy_price_override": 363.10}
     ]},
-    {"name": "Apple (AAPL)", "symbols": ["AAPL"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-10", "buy_price_override": 318.95},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28"},
     {"name": "Amazon 1 (AMZ 1)", "symbols": ["AMZN"], "pos": 1.4759, "currency": "USD", "buy_date": "2026-07-29"},
     {"name": "Amazon 2 (AMZ 2)", "symbols": ["AMZN"], "pos": 1.5, "currency": "USD", "buy_date": "2026-09-03"},
