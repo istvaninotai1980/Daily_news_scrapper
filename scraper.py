@@ -14,7 +14,7 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (AAPL ELTÁVOLÍTVA) ---
+# --- PORTFÓLIÓ ESZKÖZÖK (AAPL NÉLKÜL) ---
 PORTFOLIO = [
     {"name": "Broadcom 1 (AVGO 1)", "symbols": ["AVGO"], "pos": 0.54, "currency": "USD", "buy_date": "2026-08-28"},
     {"name": "Broadcom 2 (AVGO 2)", "symbols": ["AVGO"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-10", "buy_price_override": 363.10},
