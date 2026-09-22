@@ -14,32 +14,68 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK A LEGFRISSEBB IBKR ÁLLÁS ALAPJÁN ---
+# --- PORTFÓLIÓ ESZKÖZÖK (SÚLYOZOTT ÁTLAGÁR ALAPÚ CSOPORTOS HOZAMMÁTRIX) ---
 PORTFOLIO = [
-    {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 1.54, "currency": "USD", "buy_date": "2026-08-28", "buy_price_override": 368.23},
-    {"name": "Brookfield Corp (BN)", "symbols": ["BN"], "pos": 12.4458, "currency": "USD", "buy_date": "2026-09-22"},
+    # BROADCOM (Többütemű vásárlás)
+    {
+        "name": "Broadcom Sum (AVGO Sum)", 
+        "symbols": ["AVGO"], 
+        "is_sum": True, 
+        "currency": "USD", 
+        "buy_price_override": 368.23, # IBKR súlyozott átlagár
+        "sub_items": [
+            {"name": "└─ Broadcom 1 (AVGO 1)", "pos": 0.54, "buy_date": "2026-08-28"},
+            {"name": "└─ Broadcom 2 (AVGO 2)", "pos": 1.00, "buy_date": "2026-09-10", "buy_price_override": 363.10}
+        ]
+    },
+    # AMAZON (Többütemű vásárlás)
+    {
+        "name": "Amazon Sum (AMZ Sum)", 
+        "symbols": ["AMZ.DE", "AMZN"], 
+        "is_sum": True, 
+        "currency": "EUR", 
+        "buy_price_override": 216.47, # IBKR súlyozott átlagár
+        "sub_items": [
+            {"name": "└─ Amazon 1 (AMZ 1)", "pos": 1.4759, "buy_date": "2026-07-29"},
+            {"name": "└─ Amazon 2 (AMZ 2)", "pos": 1.5000, "buy_date": "2026-09-03"}
+        ]
+    },
+    # ALPHABET / GOOGLE (Többütemű vásárlás)
+    {
+        "name": "Alphabet Sum (GOOGL Sum)", 
+        "symbols": ["GOOGL", "GOOG"], 
+        "is_sum": True, 
+        "currency": "USD", 
+        "buy_price_override": 332.36, # IBKR súlyozott átlagár
+        "sub_items": [
+            {"name": "└─ Alphabet 1 (GOOGL 1)", "pos": 0.50, "buy_date": "2026-09-09"},
+            {"name": "└─ Alphabet 2 (GOOGL 2)", "pos": 0.50, "buy_date": "2026-09-22"}
+        ]
+    },
+    # EGYEDI POZÍCIÓK
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28", "buy_price_override": 195.90},
-    {"name": "Amazon Sum (AMZ Sum)", "symbols": ["AMZ.DE", "AMZN"], "pos": 4.4759, "currency": "EUR", "buy_date": "2026-07-29", "buy_price_override": 216.47},
-    {"name": "Alphabet (GOOGL)", "symbols": ["GOOGL", "GOOG"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-09", "buy_price_override": 332.36},
-    {"name": "Hermès International (RMS)", "symbols": ["RMS.PA", "RMS"], "pos": 0.21, "currency": "EUR", "buy_date": "2026-09-21"},
-    {"name": "Interactive Brokers (IBKR)", "symbols": ["IBKR"], "pos": 0.3666, "currency": "USD", "buy_date": "2026-09-15"},
+    {"name": "Hermès International (RMS)", "symbols": ["RMS.PA", "RMS.DE"], "pos": 0.21, "currency": "EUR", "buy_date": "2026-09-21"},
+    {"name": "Brookfield Corp (BN)", "symbols": ["BN", "BN.TO"], "pos": 12.4458, "currency": "USD", "buy_date": "2026-09-22"},
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28", "buy_price_override": 394.58},
     {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28", "buy_price_override": 2786.85},
     {"name": "S&P 500 Info Tech (QDV5)", "symbols": ["QDV5.DE", "QDV5.L"], "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19", "buy_price_override": 8.214},
     {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRW.L", "GGRW"], "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15", "buy_price_override": 40.0205}
 ]
 
-def format_pct(val):
+def format_pct(val, is_sub=False):
     if pd.isna(val) or val is None:
         return "<td style='padding:8px; text-align:center;'>N/A</td>"
     color = "green" if val >= 0 else "red"
     sign = "+" if val >= 0 else ""
-    return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold;'>{sign}{val:.2f}%</td>"
+    opacity_style = "opacity: 0.85;" if is_sub else ""
+    return f"<td style='padding:8px; text-align:center; color:{color}; font-weight:bold; {opacity_style}'>{sign}{val:.2f}%</td>"
 
-def format_weight(val):
+def format_weight(val, is_sub=False):
     if pd.isna(val) or val is None:
         return "<td style='padding:8px; text-align:center;'>N/A</td>"
-    return f"<td style='padding:8px; text-align:center; font-weight:bold; color:#0d47a1;'>{val:.2f}%</td>"
+    text_color = "#555555" if is_sub else "#0d47a1"
+    font_weight = "normal" if is_sub else "bold"
+    return f"<td style='padding:8px; text-align:center; font-weight:{font_weight}; color:{text_color};'>{val:.2f}%</td>"
 
 def get_fx_pair(currency):
     if currency == 'HUF':
@@ -59,7 +95,6 @@ def get_fx_pair(currency):
     return 1.0, None
 
 def fetch_history_with_fallback(symbols):
-    """Végigpróbálja a szimbólumokat és a periódustartományokat (1y, 1mo, 5d) az adatvesztés elkerülésére."""
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym)
@@ -79,15 +114,18 @@ def build_portfolio_table():
         hist, used_symbol = fetch_history_with_fallback(item["symbols"])
         if not hist.empty and len(hist) >= 2:
             curr_price = hist['Close'].iloc[-1]
-            
-            # Londoni penny alapú árfolyamok igazítása GBP/USD esetén
             if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] in ["USD", "GBP"]:
                 curr_price = curr_price / 100.0
 
             curr_fx, fx_hist = get_fx_pair(item["currency"])
             active_fx = curr_fx if curr_fx else 1.0
 
-            pos_mkt_val_huf = item["pos"] * curr_price * active_fx
+            if item.get("is_sum"):
+                total_pos = sum(sub["pos"] for sub in item["sub_items"])
+                pos_mkt_val_huf = total_pos * curr_price * active_fx
+            else:
+                pos_mkt_val_huf = item["pos"] * curr_price * active_fx
+
             total_calculated_huf += pos_mkt_val_huf
 
             calc_data.append({
@@ -124,34 +162,104 @@ def build_portfolio_table():
             weekly_pct = ((curr_price - hist['Close'].iloc[-5]) / hist['Close'].iloc[-5]) * 100 if len(hist) >= 5 else daily_pct
             monthly_pct = ((curr_price - hist['Close'].iloc[-22]) / hist['Close'].iloc[-22]) * 100 if len(hist) >= 22 else weekly_pct
 
-            weight_pct = (pos_mkt_val_huf / total_calculated_huf) * 100 if total_calculated_huf > 0 else 0.0
+            # AGGREGÁLT CSOPORT MEGJELENÍTÉSE
+            if item.get("is_sum"):
+                sum_weight_pct = (pos_mkt_val_huf / total_calculated_huf) * 100 if total_calculated_huf > 0 else 0.0
+                
+                # Egyedi bekerülések lekérése és súlyozott átlagárad kiszámítása devizában
+                total_cost_currency = 0.0
+                total_sub_pos = 0.0
+                sub_calc_list = []
 
-            if item.get("buy_price_override"):
-                buy_price = item["buy_price_override"]
-            else:
-                hist_btd = hist.loc[hist.index >= item["buy_date"]]
-                if not hist_btd.empty:
-                    buy_price = hist_btd['Close'].iloc[0]
-                    if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] in ["USD", "GBP"]:
-                        buy_price = buy_price / 100.0
+                for sub in item["sub_items"]:
+                    sub_pos = sub["pos"]
+                    if sub.get("buy_price_override"):
+                        sub_buy_p = sub["buy_price_override"]
+                    else:
+                        hist_btd = hist.loc[hist.index >= sub["buy_date"]]
+                        sub_buy_p = hist_btd['Close'].iloc[0] if not hist_btd.empty else curr_price
+                        if used_symbol and used_symbol.endswith(".L") and sub_buy_p > 1000 and item["currency"] in ["USD", "GBP"]:
+                            sub_buy_p = sub_buy_p / 100.0
+
+                    total_cost_currency += sub_pos * sub_buy_p
+                    total_sub_pos += sub_pos
+                    sub_calc_list.append({"sub": sub, "buy_price": sub_buy_p})
+
+                # Ha van megadott IBKR súlyozott felülbírálás, azt használja, egyébként a kiszámolt átlagárat
+                if item.get("buy_price_override"):
+                    weighted_buy_price = item["buy_price_override"]
                 else:
-                    buy_price = curr_price
+                    weighted_buy_price = (total_cost_currency / total_sub_pos) if total_sub_pos > 0 else curr_price
 
-            dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
-            buy_date_str = item["buy_date"]
+                # Csoportos Devizás BTD % pontos kalkulációja
+                sum_dev_btd_pct = ((curr_price - weighted_buy_price) / weighted_buy_price) * 100 if weighted_buy_price > 0 else 0.0
 
-            rows_html += f"""
-            <tr>
-                <td style="padding:8px; font-weight:bold;">{item['name']}</td>
-                <td style="padding:8px; text-align:center;">{buy_date_str}</td>
-                <td style="padding:8px; text-align:center;">{curr_price:.2f} {item['currency']}</td>
-                {format_pct(daily_pct)}
-                {format_pct(weekly_pct)}
-                {format_pct(monthly_pct)}
-                {format_pct(dev_btd_pct)}
-                {format_weight(weight_pct)}
-            </tr>
-            """
+                # Aggregált Fősor (Kiemelt kék háttérrel)
+                rows_html += f"""
+                <tr style="background-color:#e8f4f8;">
+                    <td style="padding:8px; font-weight:bold;">{item['name']}</td>
+                    <td style="padding:8px; text-align:center; font-weight:bold;">Aggregált</td>
+                    <td style="padding:8px; text-align:center; font-weight:bold;">{curr_price:.2f} {item['currency']}</td>
+                    {format_pct(daily_pct)}
+                    {format_pct(weekly_pct)}
+                    {format_pct(monthly_pct)}
+                    {format_pct(sum_dev_btd_pct)}
+                    {format_weight(sum_weight_pct)}
+                </tr>
+                """
+
+                # Egyedi vásárlási pontok (AL-SOROK SZÜRKE BETŰS ÍRÁSSAL)
+                for sc in sub_calc_list:
+                    sub = sc["sub"]
+                    sub_buy_p = sc["buy_price"]
+                    sub_pos = sub["pos"]
+                    sub_mkt_val_huf = sub_pos * curr_price * curr_fx
+                    sub_weight_pct = (sub_mkt_val_huf / total_calculated_huf) * 100 if total_calculated_huf > 0 else 0.0
+                    sub_btd_pct = ((curr_price - sub_buy_p) / sub_buy_p) * 100 if sub_buy_p > 0 else 0.0
+
+                    rows_html += f"""
+                    <tr style="color:#666666; font-size:12px;">
+                        <td style="padding:6px 8px 6px 20px; color:#666666;">{sub['name']} ({sub_pos} db)</td>
+                        <td style="padding:6px; text-align:center; color:#666666;">{sub['buy_date']}</td>
+                        <td style="padding:6px; text-align:center; color:#666666;">{curr_price:.2f} {item['currency']}</td>
+                        {format_pct(daily_pct, is_sub=True)}
+                        {format_pct(weekly_pct, is_sub=True)}
+                        {format_pct(monthly_pct, is_sub=True)}
+                        {format_pct(sub_btd_pct, is_sub=True)}
+                        {format_weight(sub_weight_pct, is_sub=True)}
+                    </tr>
+                    """
+
+            # STANDARD EGYEDI POZÍCIÓK
+            else:
+                weight_pct = (pos_mkt_val_huf / total_calculated_huf) * 100 if total_calculated_huf > 0 else 0.0
+
+                if item.get("buy_price_override"):
+                    buy_price = item["buy_price_override"]
+                else:
+                    hist_btd = hist.loc[hist.index >= item["buy_date"]]
+                    if not hist_btd.empty:
+                        buy_price = hist_btd['Close'].iloc[0]
+                        if used_symbol and used_symbol.endswith(".L") and buy_price > 1000 and item["currency"] in ["USD", "GBP"]:
+                            buy_price = buy_price / 100.0
+                    else:
+                        buy_price = curr_price
+
+                dev_btd_pct = ((curr_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0.0
+                buy_date_str = item["buy_date"]
+
+                rows_html += f"""
+                <tr>
+                    <td style="padding:8px; font-weight:bold;">{item['name']}</td>
+                    <td style="padding:8px; text-align:center;">{buy_date_str}</td>
+                    <td style="padding:8px; text-align:center;">{curr_price:.2f} {item['currency']}</td>
+                    {format_pct(daily_pct)}
+                    {format_pct(weekly_pct)}
+                    {format_pct(monthly_pct)}
+                    {format_pct(dev_btd_pct)}
+                    {format_weight(weight_pct)}
+                </tr>
+                """
         else:
             rows_html += f"<tr><td style='padding:8px;'>{item['name']}</td><td style='padding:8px;'>{item.get('buy_date', 'N/A')}</td><td colspan='6' style='text-align:center;'>Adatfrissítés alatt</td></tr>"
 
