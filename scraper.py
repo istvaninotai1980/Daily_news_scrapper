@@ -14,18 +14,19 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK PONTOS IBKR ÁTLAGÁRAKKAL ---
+# --- PORTFÓLIÓ ESZKÖZÖK A LEGFRISSEBB IBKR ÁLLÁS ALAPJÁN ---
 PORTFOLIO = [
     {"name": "Broadcom (AVGO)", "symbols": ["AVGO"], "pos": 1.54, "currency": "USD", "buy_date": "2026-08-28", "buy_price_override": 368.23},
+    {"name": "Brookfield Corp (BN)", "symbols": ["BN"], "pos": 12.4458, "currency": "USD", "buy_date": "2026-09-22"},
     {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28", "buy_price_override": 195.90},
     {"name": "Amazon Sum (AMZ Sum)", "symbols": ["AMZ.DE", "AMZN"], "pos": 4.4759, "currency": "EUR", "buy_date": "2026-07-29", "buy_price_override": 216.47},
     {"name": "Alphabet (GOOGL)", "symbols": ["GOOGL", "GOOG"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-09", "buy_price_override": 332.36},
-    {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 1.0, "currency": "USD", "buy_date": "2026-09-03", "buy_price_override": 605.75},
+    {"name": "Hermès International (RMS)", "symbols": ["RMS.PA", "RMS"], "pos": 0.21, "currency": "EUR", "buy_date": "2026-09-21"},
+    {"name": "Interactive Brokers (IBKR)", "symbols": ["IBKR"], "pos": 0.3666, "currency": "USD", "buy_date": "2026-09-15"},
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28", "buy_price_override": 394.58},
     {"name": "Constellation Software (CSU)", "symbols": ["CSU.TO"], "pos": 0.3056, "currency": "CAD", "buy_date": "2026-01-28", "buy_price_override": 2786.85},
     {"name": "S&P 500 Info Tech (QDV5)", "symbols": ["QDV5.DE", "QDV5.L"], "pos": 63.6748, "currency": "EUR", "buy_date": "2026-01-19", "buy_price_override": 8.214},
-    {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRW.L", "GGRW"], "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15", "buy_price_override": 40.0205},
-    {"name": "S&P 500 ETF (VUSA)", "symbols": ["VUSA.L", "VUSA.DE"], "pos": 4.5854, "currency": "GBP", "buy_date": "2026-01-15", "buy_price_override": 98.7901}
+    {"name": "Global Growth ETF (GGRW)", "symbols": ["GGRW.L", "GGRW"], "pos": 15.0924, "currency": "USD", "buy_date": "2026-01-15", "buy_price_override": 40.0205}
 ]
 
 def format_pct(val):
