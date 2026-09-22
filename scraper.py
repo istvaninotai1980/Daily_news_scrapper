@@ -14,46 +14,46 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# --- PORTFÓLIÓ ESZKÖZÖK (SÚLYOZOTT ÁTLAGÁR ALAPÚ CSOPORTOS HOZAMMÁTRIX) ---
+# --- PORTFÓLIÓ ESZKÖZÖK PONTOS IBKR ADATOKKAL ÉS BONTÁSSAL ---
 PORTFOLIO = [
-    # BROADCOM (Többütemű vásárlás)
+    # BROADCOM (Többütemű vásárlás - IBKR: 1.54 db, -0.8% Unrealized)
     {
         "name": "Broadcom Sum (AVGO Sum)", 
         "symbols": ["AVGO"], 
         "is_sum": True, 
         "currency": "USD", 
-        "buy_price_override": 368.23, # IBKR súlyozott átlagár
+        "buy_price_override": 368.38, # IBKR pontos átlagár a -0.8%-hoz
         "sub_items": [
             {"name": "└─ Broadcom 1 (AVGO 1)", "pos": 0.54, "buy_date": "2026-08-28"},
             {"name": "└─ Broadcom 2 (AVGO 2)", "pos": 1.00, "buy_date": "2026-09-10", "buy_price_override": 363.10}
         ]
     },
-    # AMAZON (Többütemű vásárlás)
+    # AMAZON (Többütemű vásárlás - IBKR: 4.4759 db, +3.3% Unrealized)
     {
         "name": "Amazon Sum (AMZ Sum)", 
         "symbols": ["AMZ.DE", "AMZN"], 
         "is_sum": True, 
         "currency": "EUR", 
-        "buy_price_override": 216.47, # IBKR súlyozott átlagár
+        "buy_price_override": 215.90, # IBKR pontos átlagár a +3.3%-hoz
         "sub_items": [
-            {"name": "└─ Amazon 1 (AMZ 1)", "pos": 1.4759, "buy_date": "2026-07-29"},
-            {"name": "└─ Amazon 2 (AMZ 2)", "pos": 1.5000, "buy_date": "2026-09-03"}
+            {"name": "└─ Amazon 1 (AMZ 1)", "pos": 2.9759, "buy_date": "2026-07-29"},
+            {"name": "└─ Amazon 2 (AMZ 2)", "pos": 1.5000, "buy_date": "2026-09-03", "buy_price_override": 216.47}
         ]
     },
-    # ALPHABET / GOOGLE (Többütemű vásárlás)
+    # ALPHABET / GOOGLE (Többütemű vásárlás - IBKR: 1.992 db, +3.0% Unrealized)
     {
         "name": "Alphabet Sum (GOOGL Sum)", 
         "symbols": ["GOOGL", "GOOG"], 
         "is_sum": True, 
         "currency": "USD", 
-        "buy_price_override": 332.36, # IBKR súlyozott átlagár
+        "buy_price_override": 342.96, # IBKR pontos átlagár a +3.0%-hoz
         "sub_items": [
-            {"name": "└─ Alphabet 1 (GOOGL 1)", "pos": 0.50, "buy_date": "2026-09-09"},
-            {"name": "└─ Alphabet 2 (GOOGL 2)", "pos": 0.50, "buy_date": "2026-09-22"}
+            {"name": "└─ Alphabet 1 (GOOGL 1)", "pos": 0.992, "buy_date": "2026-09-09"},
+            {"name": "└─ Alphabet 2 (GOOGL 2)", "pos": 1.000, "buy_date": "2026-09-22"}
         ]
     },
-    # EGYEDI POZÍCIÓK
-    {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28", "buy_price_override": 195.90},
+    # EGYEDI POZÍCIÓK IBKR KÉPERNYŐKÉP ALAPJÁN
+    {"name": "Nvidia IBIS (NVD)", "symbols": ["NVD.DE", "NVDA"], "pos": 1.5, "currency": "EUR", "buy_date": "2026-08-28", "buy_price_override": 195.80},
     {"name": "Hermès International (RMS)", "symbols": ["RMS.PA", "RMS.DE"], "pos": 0.21, "currency": "EUR", "buy_date": "2026-09-21"},
     {"name": "Brookfield Corp (BN)", "symbols": ["BN", "BN.TO"], "pos": 12.4458, "currency": "USD", "buy_date": "2026-09-22"},
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 0.8895, "currency": "USD", "buy_date": "2026-07-28", "buy_price_override": 394.58},
@@ -166,7 +166,6 @@ def build_portfolio_table():
             if item.get("is_sum"):
                 sum_weight_pct = (pos_mkt_val_huf / total_calculated_huf) * 100 if total_calculated_huf > 0 else 0.0
                 
-                # Egyedi bekerülések lekérése és súlyozott átlagárad kiszámítása devizában
                 total_cost_currency = 0.0
                 total_sub_pos = 0.0
                 sub_calc_list = []
@@ -185,13 +184,11 @@ def build_portfolio_table():
                     total_sub_pos += sub_pos
                     sub_calc_list.append({"sub": sub, "buy_price": sub_buy_p})
 
-                # Ha van megadott IBKR súlyozott felülbírálás, azt használja, egyébként a kiszámolt átlagárat
                 if item.get("buy_price_override"):
                     weighted_buy_price = item["buy_price_override"]
                 else:
                     weighted_buy_price = (total_cost_currency / total_sub_pos) if total_sub_pos > 0 else curr_price
 
-                # Csoportos Devizás BTD % pontos kalkulációja
                 sum_dev_btd_pct = ((curr_price - weighted_buy_price) / weighted_buy_price) * 100 if weighted_buy_price > 0 else 0.0
 
                 # Aggregált Fősor (Kiemelt kék háttérrel)
