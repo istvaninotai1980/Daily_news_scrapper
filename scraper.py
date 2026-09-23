@@ -1,4 +1,5 @@
 import os
+import time
 import smtplib
 import requests
 import feedparser
@@ -89,20 +90,28 @@ def get_fx_pair(currency):
         for p in ["1y", "1mo", "5d"]:
             hist = fx.history(period=p)
             if not hist.empty:
-                return hist['Close'].iloc[-1], hist
+                valid_closes = hist['Close'].dropna()
+                if not valid_closes.empty:
+                    return valid_closes.iloc[-1], hist
     except Exception as e:
         print(f"FX Error ({currency}): {e}")
     return 1.0, None
 
 def fetch_history_with_fallback(symbols):
+    """Lekéri a szimbólumokat. Ha a legfrissebb nap hiányzik/zárva a piac, az utolsó érvényes lezárt értéket adja vissza."""
     for sym in symbols:
         try:
+            time.sleep(0.5) # Yahoo Finance Rate Limit elkerülése
             ticker = yf.Ticker(sym)
             for p in ["1y", "1mo", "5d"]:
                 hist = ticker.history(period=p)
-                if not hist.empty and len(hist) >= 2 and not pd.isna(hist['Close'].iloc[-1]):
-                    return hist, sym
-        except Exception:
+                if not hist.empty:
+                    # Szűrjük ki a NaN értékeket az árfolyamokból
+                    valid_hist = hist.dropna(subset=['Close'])
+                    if len(valid_hist) >= 2:
+                        return valid_hist, sym
+        except Exception as e:
+            print(f"Hiba a szimbólum lekérésekor ({sym}): {e}")
             continue
     return pd.DataFrame(), None
 
@@ -113,6 +122,7 @@ def build_portfolio_table():
     for item in PORTFOLIO:
         hist, used_symbol = fetch_history_with_fallback(item["symbols"])
         if not hist.empty and len(hist) >= 2:
+            # Utolsó elérhető záróárfolyam
             curr_price = hist['Close'].iloc[-1]
             if used_symbol and used_symbol.endswith(".L") and curr_price > 1000 and item["currency"] in ["USD", "GBP"]:
                 curr_price = curr_price / 100.0
