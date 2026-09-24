@@ -1,6 +1,6 @@
 import pandas as pd
 
-# ANSI Színkódok a formázáshoz
+# ANSI Színkódok a terminál/hírlevél formázáshoz
 GRAY = "\033[90m"         # Halvány szürke az egyedi tételekhez (Lots)
 WHITE_BOLD = "\033[1;37m" # Félkövér fehér az akkumulált sorokhoz (Total)
 RESET = "\033[0m"         # Színbeállítás visszaállítása
@@ -10,7 +10,7 @@ RESET = "\033[0m"         # Színbeállítás visszaállítása
 # ==========================================
 
 trade_lots = [
-    # META PLATORMS (META) vásárlások
+    # META PLATFORMS (META) vásárlások
     {
         "ticker": "META",
         "name": "Meta Platforms (Lot 1)",
@@ -22,8 +22,8 @@ trade_lots = [
         "ticker": "META",
         "name": "Meta Platforms (Lot 2 - Ma 15:30)",
         "buy_date": "2026-09-24",
-        "buy_price": 740.98,     # Mai vételi ár (15:30 CEST nyitási árfolyam)
-        "shares": 0.73           # Tételtípus szerinti méret
+        "buy_price": 740.98,     # Mai vételi ár (Szept 24. nyitási ár)
+        "shares": 0.73           # Mai vásárolt darabszám
     },
 
     # NVIDIA (NVDA) vásárlások
@@ -52,7 +52,7 @@ trade_lots = [
     },
     {
         "ticker": "GOOGL",
-        "name": "Alphabet Inc (Lot 2)",
+        "name": "Alphabet Inc (Lot 2 - Szept 22)",
         "buy_date": "2026-09-22",
         "buy_price": 352.82,
         "shares": 0.992
@@ -61,7 +61,7 @@ trade_lots = [
     # BROOKFIELD (BN) vásárlás
     {
         "ticker": "BN",
-        "name": "Brookfield Corp (Lot 1)",
+        "name": "Brookfield Corp (Lot 1 - Szept 22)",
         "buy_date": "2026-09-22",
         "buy_price": 38.165,
         "shares": 12.4458
@@ -130,7 +130,7 @@ def generate_lot_and_total_report(lots, market_prices):
                 "BTD Hozam (%)": f"{btd_return:+.2f}%"
             })
         
-        # Akkumulált sor generálása (Fehér), ha 1-nél több tétel van
+        # Akkumulált sor generálása (Fehér), ha 1-nél több tétel van az adott részvényből
         if len(lot_list) > 1:
             avg_buy_price = tot_cost / tot_shares
             tot_mkt_val = tot_shares * curr_price
@@ -154,7 +154,7 @@ def generate_lot_and_total_report(lots, market_prices):
     return rows
 
 # ==========================================
-# 3. TERMINÁL KIÍRATÁS SZÍNEZÉSSEL
+# 3. TERMINÁL KIÍRATÁS ÉS RIPORT GENERÁLÁS
 # ==========================================
 
 def print_formatted_report():
@@ -164,13 +164,14 @@ def print_formatted_report():
     print("                                FALCON PORTFÓLIÓ DIVERZIFIKÁLT BTD RIPORT (TAX LOTS)                                   ")
     print("========================================================================================================================")
     
-    header = f"{'Megnevezés':<32} | {'Dátum':<11} | {'Darab':<8} | {'Vételi Ár':<15} | {'Piaci Ár':<10} | {'P&L ($)':<10} | {'Hozam (%)':<10}"
+    header = f"{'Megnevezés':<35} | {'Dátum':<11} | {'Darab':<8} | {'Vételi Ár':<16} | {'Piaci Ár':<10} | {'P&L ($)':<10} | {'Hozam (%)':<10}"
     print(header)
     print("-" * 120)
 
     for row in report_rows:
-        line = f"{row['Megnevezés']:<32} | {row['Dátum']:<11} | {row['Darab']:<8} | {row['Vételi Ár']:<15} | {row['Piaci Ár']:<10} | {row['P&L ($)']:<10} | {row['BTD Hozam (%)']:<10}"
+        line = f"{row['Megnevezés']:<35} | {row['Dátum']:<11} | {row['Darab']:<8} | {row['Vételi Ár']:<16} | {row['Piaci Ár']:<10} | {row['P&L ($)']:<10} | {row['BTD Hozam (%)']:<10}"
         
+        # Színezés: LOT szürke, TOTAL félkövér fehér
         if row["Típus"] == "LOT":
             print(f"{GRAY}{line}{RESET}")
         else:
