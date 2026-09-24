@@ -1,7 +1,7 @@
 import pandas as pd
 
-# ANSI Színkódok a terminál/hírlevél formázáshoz
-GRAY = "\033[90m"         # Halvány szürke az egyedi tételekhez (Lots)
+# ANSI Színkódok a terminál formázásához
+GRAY = "\033[90m"         # Halvány szürke az egyedi tételekhez (Tax Lots)
 WHITE_BOLD = "\033[1;37m" # Félkövér fehér az akkumulált sorokhoz (Total)
 RESET = "\033[0m"         # Színbeállítás visszaállítása
 
@@ -97,6 +97,10 @@ def generate_lot_and_total_report(lots, market_prices):
         grouped_lots.setdefault(ticker, []).append(lot)
 
     rows = []
+    
+    # Globális összegzéshez
+    global_cost = 0.0
+    global_mkt_val = 0.0
 
     for ticker, lot_list in grouped_lots.items():
         curr_price = market_prices.get(ticker, 0.0)
@@ -115,6 +119,9 @@ def generate_lot_and_total_report(lots, market_prices):
             
             tot_shares += shares
             tot_cost += cost
+            
+            global_cost += cost
+            global_mkt_val += mkt_val
 
             rows.append({
                 "Típus": "LOT",
@@ -151,16 +158,16 @@ def generate_lot_and_total_report(lots, market_prices):
                 "BTD Hozam (%)": f"{tot_return:+.2f}%"
             })
 
-    return rows
+    return rows, global_cost, global_mkt_val
 
 # ==========================================
 # 3. TERMINÁL KIÍRATÁS ÉS RIPORT GENERÁLÁS
 # ==========================================
 
 def print_formatted_report():
-    report_rows = generate_lot_and_total_report(trade_lots, current_market_prices)
+    report_rows, total_cost, total_val = generate_lot_and_total_report(trade_lots, current_market_prices)
     
-    print("========================================================================================================================")
+    print("\n========================================================================================================================")
     print("                                FALCON PORTFÓLIÓ DIVERZIFIKÁLT BTD RIPORT (TAX LOTS)                                   ")
     print("========================================================================================================================")
     
@@ -178,6 +185,17 @@ def print_formatted_report():
             print(f"{WHITE_BOLD}{line}{RESET}")
 
     print("========================================================================================================================")
+    
+    # TELJES PORTFÓLIÓ ÖSSZESÍTŐ KIÍRÁSA
+    total_pnl = total_val - total_cost
+    total_return_pct = ((total_val - total_cost) / total_cost) * 100 if total_cost > 0 else 0.0
+    
+    print("\nTELJES PORTFÓLIÓ ÖSSZESÍTŐ MÉRLEG:")
+    print(f" -> Teljes Befektetett Tőke:  ${total_cost:,.2f}")
+    print(f" -> Jelenlegi Piaci Érték:   ${total_val:,.2f}")
+    print(f" -> Nem Realizált Profit:    ${total_pnl:+,.2f}")
+    print(f" -> Súlyozott BTD Hozam:     {total_return_pct:+.2f}%\n")
 
+# A kód automatikus lefuttatása
 if __name__ == "__main__":
     print_formatted_report()
