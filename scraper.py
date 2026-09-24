@@ -1,45 +1,31 @@
 import pandas as pd
 
-# ANSI Színkódok a terminál formázásához
-GRAY = "\033[90m"         # Halvány szürke az egyedi tételekhez (Tax Lots)
+# ANSI Színkódok a terminál / hírlevél formázáshoz
+GRAY = "\033[90m"      # Halvány szürke az egyedi tételekhez (Lots)
 WHITE_BOLD = "\033[1;37m" # Félkövér fehér az akkumulált sorokhoz (Total)
-RESET = "\033[0m"         # Színbeállítás visszaállítása
+RESET = "\033[0m"      # Színbeállítás visszaállítása
 
 # ==========================================
 # 1. ADATSZERKEZET: PONTOS VÉTELI TÉTELEK (TAX LOTS)
 # ==========================================
 
 trade_lots = [
-    # META PLATFORMS (META) vásárlások
-    {
-        "ticker": "META",
-        "name": "Meta Platforms (Lot 1)",
-        "buy_date": "2026-08-15",
-        "buy_price": 660.52,     # Korábbi vételi ár
-        "shares": 1.0
-    },
-    {
-        "ticker": "META",
-        "name": "Meta Platforms (Lot 2 - Ma 15:30)",
-        "buy_date": "2026-09-24",
-        "buy_price": 740.98,     # Mai vételi ár (Szept 24. nyitási ár)
-        "shares": 0.73           # Mai vásárolt darabszám
-    },
-
     # NVIDIA (NVDA) vásárlások
     {
         "ticker": "NVDA",
         "name": "NVIDIA Corp (Lot 1)",
         "buy_date": "2026-07-15",
         "buy_price": 125.50,
-        "shares": 0.8
+        "shares": 0.8,
+        "is_total_row": False
     },
     {
         "ticker": "NVDA",
         "name": "NVIDIA Corp (Lot 2 - BTD)",
         "buy_date": "2026-08-20",
         "buy_price": 118.20,
-        "shares": 0.7
+        "shares": 0.7,
+        "is_total_row": False
     },
     
     # GOOGLE (GOOGL) vásárlások
@@ -48,23 +34,26 @@ trade_lots = [
         "name": "Alphabet Inc (Lot 1)",
         "buy_date": "2026-09-09",
         "buy_price": 331.36,
-        "shares": 1.0
+        "shares": 1.0,
+        "is_total_row": False
     },
     {
         "ticker": "GOOGL",
-        "name": "Alphabet Inc (Lot 2 - Szept 22)",
+        "name": "Alphabet Inc (Lot 2 - Ma)",
         "buy_date": "2026-09-22",
-        "buy_price": 352.82,
-        "shares": 0.992
+        "buy_price": 352.82,     # Ma vásárolt ár
+        "shares": 0.992,         # Ma vásárolt darabszám
+        "is_total_row": False
     },
 
     # BROOKFIELD (BN) vásárlás
     {
         "ticker": "BN",
-        "name": "Brookfield Corp (Lot 1 - Szept 22)",
+        "name": "Brookfield Corp (Lot 1 - Ma)",
         "buy_date": "2026-09-22",
-        "buy_price": 38.165,
-        "shares": 12.4458
+        "buy_price": 38.165,     # Ma vásárolt ár
+        "shares": 12.4458,       # Ma vásárolt darabszám
+        "is_total_row": False
     },
 
     # TSMC (TSM) vásárlás
@@ -73,34 +62,31 @@ trade_lots = [
         "name": "Taiwan Semi ADR (Lot 1)",
         "buy_date": "2026-08-10",
         "buy_price": 394.585,
-        "shares": 0.8895
+        "shares": 0.8895,
+        "is_total_row": False
     }
 ]
 
 # Aktuális piaci árak (USD)
 current_market_prices = {
-    "META": 744.35,
     "NVDA": 132.80,
-    "GOOGL": 352.37,
-    "BN": 38.14,
+    "GOOGL": 352.37,   # Friss piaci ár a képernyőképed alapján
+    "BN": 38.14,       # Friss piaci ár a képernyőképed alapján
     "TSM": 427.98
 }
 
 # ==========================================
-# 2. FELDOLGOZÁS ÉS AKKUMULÁCIÓ SZÁMÍTÁS
+# 2. FELDOLGOZÁS ÉS AKKUMULÁCIÓ SZÁMÍTÁS
 # ==========================================
 
 def generate_lot_and_total_report(lots, market_prices):
+    # Csoportosítás ticker szerint az akkumuláláshoz
     grouped_lots = {}
     for lot in lots:
         ticker = lot["ticker"]
         grouped_lots.setdefault(ticker, []).append(lot)
 
     rows = []
-    
-    # Globális összegzéshez
-    global_cost = 0.0
-    global_mkt_val = 0.0
 
     for ticker, lot_list in grouped_lots.items():
         curr_price = market_prices.get(ticker, 0.0)
@@ -119,9 +105,6 @@ def generate_lot_and_total_report(lots, market_prices):
             
             tot_shares += shares
             tot_cost += cost
-            
-            global_cost += cost
-            global_mkt_val += mkt_val
 
             rows.append({
                 "Típus": "LOT",
@@ -137,7 +120,7 @@ def generate_lot_and_total_report(lots, market_prices):
                 "BTD Hozam (%)": f"{btd_return:+.2f}%"
             })
         
-        # Akkumulált sor generálása (Fehér), ha 1-nél több tétel van az adott részvényből
+        # Ha több mint 1 tétel van az adott részvényből, akkumulált sor generálása (Fehér)
         if len(lot_list) > 1:
             avg_buy_price = tot_cost / tot_shares
             tot_mkt_val = tot_shares * curr_price
@@ -148,7 +131,7 @@ def generate_lot_and_total_report(lots, market_prices):
                 "Típus": "TOTAL",
                 "Megnevezés": f">>> {ticker} ÖSSZESÍTVE (Akkumulált)",
                 "Ticker": ticker,
-                "Dátum": "Összesítés",
+                "Dátum": "Összesített",
                 "Darab": f"{tot_shares:.4f}",
                 "Vételi Ár": f"${avg_buy_price:.2f} (Átlag)",
                 "Piaci Ár": f"${curr_price:.2f}",
@@ -158,44 +141,33 @@ def generate_lot_and_total_report(lots, market_prices):
                 "BTD Hozam (%)": f"{tot_return:+.2f}%"
             })
 
-    return rows, global_cost, global_mkt_val
+    return rows
 
 # ==========================================
-# 3. TERMINÁL KIÍRATÁS ÉS RIPORT GENERÁLÁS
+# 3. TERMINÁL KIÍRATÁS SZÍNEZÉSSEL
 # ==========================================
 
 def print_formatted_report():
-    report_rows, total_cost, total_val = generate_lot_and_total_report(trade_lots, current_market_prices)
+    report_rows = generate_lot_and_total_report(trade_lots, current_market_prices)
     
-    print("\n========================================================================================================================")
+    print("========================================================================================================================")
     print("                                FALCON PORTFÓLIÓ DIVERZIFIKÁLT BTD RIPORT (TAX LOTS)                                   ")
     print("========================================================================================================================")
     
-    header = f"{'Megnevezés':<35} | {'Dátum':<11} | {'Darab':<8} | {'Vételi Ár':<16} | {'Piaci Ár':<10} | {'P&L ($)':<10} | {'Hozam (%)':<10}"
+    header = f"{'Megnevezés':<32} | {'Dátum':<11} | {'Darab':<8} | {'Vételi Ár':<15} | {'Piaci Ár':<10} | {'P&L ($)':<10} | {'Hozam (%)':<10}"
     print(header)
     print("-" * 120)
 
     for row in report_rows:
-        line = f"{row['Megnevezés']:<35} | {row['Dátum']:<11} | {row['Darab']:<8} | {row['Vételi Ár']:<16} | {row['Piaci Ár']:<10} | {row['P&L ($)']:<10} | {row['BTD Hozam (%)']:<10}"
+        line = f"{row['Megnevezés']:<32} | {row['Dátum']:<11} | {row['Darab']:<8} | {row['Vételi Ár']:<15} | {row['Piaci Ár']:<10} | {row['P&L ($)']:<10} | {row['BTD Hozam (%)']:<10}"
         
-        # Színezés: LOT szürke, TOTAL félkövér fehér
+        # Színezési logika: Egyedi tételek szürkék, Akkumulált sorok félkövér fehérek
         if row["Típus"] == "LOT":
             print(f"{GRAY}{line}{RESET}")
         else:
             print(f"{WHITE_BOLD}{line}{RESET}")
 
     print("========================================================================================================================")
-    
-    # TELJES PORTFÓLIÓ ÖSSZESÍTŐ KIÍRÁSA
-    total_pnl = total_val - total_cost
-    total_return_pct = ((total_val - total_cost) / total_cost) * 100 if total_cost > 0 else 0.0
-    
-    print("\nTELJES PORTFÓLIÓ ÖSSZESÍTŐ MÉRLEG:")
-    print(f" -> Teljes Befektetett Tőke:  ${total_cost:,.2f}")
-    print(f" -> Jelenlegi Piaci Érték:   ${total_val:,.2f}")
-    print(f" -> Nem Realizált Profit:    ${total_pnl:+,.2f}")
-    print(f" -> Súlyozott BTD Hozam:     {total_return_pct:+.2f}%\n")
 
-# A kód automatikus lefuttatása
 if __name__ == "__main__":
     print_formatted_report()
