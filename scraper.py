@@ -23,7 +23,7 @@ PORTFOLIO = [
         "symbols": ["AVGO"], 
         "is_sum": True, 
         "currency": "USD", 
-        "buy_price_override": 368.38, # IBKR pontos átlagár a -0.8%-hoz
+        "buy_price_override": 368.38, # IBKR pontos átlagár
         "sub_items": [
             {"name": "└─ Broadcom 1 (AVGO 1)", "pos": 0.54, "buy_date": "2026-08-28"},
             {"name": "└─ Broadcom 2 (AVGO 2)", "pos": 1.00, "buy_date": "2026-09-10", "buy_price_override": 363.10}
@@ -35,7 +35,7 @@ PORTFOLIO = [
         "symbols": ["AMZ.DE", "AMZN"], 
         "is_sum": True, 
         "currency": "EUR", 
-        "buy_price_override": 215.90, # IBKR pontos átlagár a +3.3%-hoz
+        "buy_price_override": 215.90, # IBKR pontos átlagár
         "sub_items": [
             {"name": "└─ Amazon 1 (AMZ 1)", "pos": 2.9759, "buy_date": "2026-07-29"},
             {"name": "└─ Amazon 2 (AMZ 2)", "pos": 1.5000, "buy_date": "2026-09-03", "buy_price_override": 216.47}
@@ -47,7 +47,7 @@ PORTFOLIO = [
         "symbols": ["GOOGL", "GOOG"], 
         "is_sum": True, 
         "currency": "USD", 
-        "buy_price_override": 342.96, # IBKR pontos átlagár a +3.0%-hoz
+        "buy_price_override": 342.96, # IBKR pontos átlagár
         "sub_items": [
             {"name": "└─ Alphabet 1 (GOOGL 1)", "pos": 0.992, "buy_date": "2026-09-09"},
             {"name": "└─ Alphabet 2 (GOOGL 2)", "pos": 1.000, "buy_date": "2026-09-22"}
@@ -332,3 +332,249 @@ def get_quant_summary():
             "Cím: Makrogazdasági indikátorok és devizapiaci elemzés\nURL: https://telex.hu/gazdasag"
         ]
 
+    prompt = """
+    Act as a senior quantitative equity analyst and financial journalist. 
+    Filter the provided raw financial news and generate a concentrated summary of exactly the TOP 3 most market-moving stories.
+
+    CRITICAL LINKING RULE:
+    Each story MUST contain a working HTML hyperlink targeting the EXACT 'URL' provided in the input text for that specific article. Do NOT invent fake links, do NOT output markdown syntax.
+
+    Format strictly as pure HTML for each story:
+    <div style='margin-bottom:15px; padding:12px; border-left:4px solid #1976d2; background:#f8f9fa;'>
+        <h4 style='margin:0 0 8px 0; color:#0d47a1;'>[Sorszám]. 📈 [Cím]</h4>
+        <p style='margin:4px 0;'><b>A hír lényege (Signal):</b> [1-2 tömör mondat]</p>
+        <p style='margin:4px 0;'><b>Befektetői hatás (Investor Impact):</b> [Szakmai implikáció]</p>
+        <p style='margin:4px 0;'><b>Forrás:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="color:#1a0dab; font-weight:bold;" target="_blank">Kattints a teljes cikk elolvasásához</a></p>
+    </div>
+
+    Rules:
+    - Output language: Hungarian.
+    - Professional, objective, financial tone.
+    - Ensure the href attribute in the anchor tag contains the full absolute URL from the input.
+    """
+    try:
+        res = local_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n\n".join(raw_news)}],
+            temperature=0.2
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        print(f"OpenAI hiba: {e}")
+        return f"<p style='color:red;'><b>API Hiba történt:</b> {str(e)}</p>"
+
+# --- INTELLIGENS KLÍMA, ENERGIA & KÖRNYEZET SZŰRŐ ---
+def get_smart_climate_news():
+    api_key = os.environ.get("OPENAI_API_KEY")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    climate_feeds = [
+        "https://www.portfolio.hu/rss/zoldvilag.xml",
+        "https://g7.hu/category/zold/feed/",
+        "https://hvg.hu/rss/zold",
+        "https://telex.hu/rss/zold",
+        "https://hu.euronews.com/rss?format=xml&level=theme&name=green",
+        "https://villanyautosok.hu/feed/",
+        "https://nrgreport.com/rss"
+    ]
+    
+    raw_climate = []
+
+    for f in climate_feeds:
+        try:
+            resp = requests.get(f, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.content)
+                for entry in parsed.entries[:25]:
+                    title = getattr(entry, 'title', '').strip()
+                    link = getattr(entry, 'link', '').strip()
+                    summary = getattr(entry, 'summary', '').strip()
+                    if title and link:
+                        raw_climate.append(f"Cím: {title}\nURL: {link}\nÖsszefoglaló: {summary[:150]}")
+        except Exception:
+            continue
+
+    if not raw_climate:
+        raw_climate = [
+            "Cím: Európai energiaátmenet és megújuló kapacitások fejlődése\nURL: https://www.portfolio.hu/zoldvilag",
+            "Cím: Dekarbonizációs törekvések és fenntartható ipari megoldások\nURL: https://g7.hu/category/zold",
+            "Cím: Klímapolitikai döntések és környezetvédelmi szabályozások az EU-ban\nURL: https://hu.euronews.com/green"
+        ]
+
+    if not api_key:
+        return fetch_top_news(["https://www.portfolio.hu/rss/zoldvilag.xml"], 5)
+
+    prompt = """
+    Te egy vezető energetikai, környezetvédelmi és klímapolitikai szakértő vagy. 
+    A megadott nyers hírekből válogass ki PONTOSAN 5 DARAB magas minőségű, releváns hírt!
+
+    KÖTELEZŐ TÉMÁK ÉS FÓKUSZ:
+    - Klímapolitika, dekarbonizáció, fenntarthatóság.
+    - Energiaipar, megújuló energia, hálózatfejlesztés, e-mobilitás, atomenergia, energiapiacok.
+    - Környezetvédelem, európai és magyar zöld szabályozások.
+
+    SZIGORÚ SZABÁLYOK:
+    - A kimenetben PONTOSAN 5 DARAB <li> elemnek kell szerepelnie (semmiképp se kevesebbnek).
+    - Kizárólag a megadott input URL-eket használd fel.
+    - Kerüld a pártpolitikát, bulvárt és kattintásvadász cikkeket.
+
+    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető szöveg NÉLKÜL:
+    <ul style='padding-left:20px;'>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🌱 <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+    </ul>
+    """
+
+    try:
+        local_client = OpenAI(api_key=api_key)
+        res = local_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n\n".join(raw_climate)}],
+            temperature=0.2
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        print(f"Smart Climate Error: {e}")
+        return fetch_top_news(["https://www.portfolio.hu/rss/zoldvilag.xml"], 5)
+
+# --- INTELLIGENS SPORT HÍRGYŰJTŐ ÉS SZŰRŐ ---
+def get_smart_sports_news():
+    api_key = os.environ.get("OPENAI_API_KEY")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    sport_feeds = [
+        "https://hvg.hu/rss/sport",
+        "https://telex.hu/rss/sport",
+        "https://index.hu/24ora/rss/?f=sport"
+    ]
+    
+    raw_sports = []
+    for f in sport_feeds:
+        try:
+            resp = requests.get(f, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.content)
+                for entry in parsed.entries[:20]:
+                    title = getattr(entry, 'title', '').strip()
+                    link = getattr(entry, 'link', '').strip()
+                    if title and link:
+                        raw_sports.append(f"Cím: {title}\nURL: {link}")
+        except Exception:
+            continue
+
+    if not raw_sports or not api_key:
+        return fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
+
+    prompt = """
+    Te egy intelligens sportújságíró asszisztens vagy. 
+    A megadott nyers sporthírek közül válogass ki és állíts össze PONTOSAN 5 darab hírből álló válogatást a következő szigorú megoszlásban:
+
+    1. EXACTLY 1 Forma–1 (F1) hír.
+    2. EXACTLY 1 Liverpool FC / Premier League hír.
+    3. EXACTLY 3 Kiemelt magyar vonatkozású sporthír vagy világverseny eredmény.
+
+    Ha valamelyik kategóriából nem találsz közvetlen hírt az inputban, válaszd ki a legfontosabb általános sporthírt a helyére.
+
+    Kimeneti formátum: Tisztán HTML lista (`<ul style='padding-left:20px;'>...</ul>`), felvezető szöveg NÉLKÜL:
+    <ul style='padding-left:20px;'>
+        <li style='margin-bottom:8px;'>🏎️ <b>[Forma-1]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>⚽ <b>[Liverpool / PL]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🇭🇺 <b>[Magyar Sport]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🇭🇺 <b>[Magyar Sport]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+        <li style='margin-bottom:8px;'>🇭🇺 <b>[Magyar Sport]:</b> <a href="PONTOS_ADOTT_URL_AZ_INPUTBÓL" style="text-decoration:none; color:#1a0dab; font-weight:bold;" target="_blank">[Cím]</a></li>
+    </ul>
+
+    Szabályok:
+    - Kizárólag az inputban megadott pontos URL-eket használd fel.
+    - Ne használj markdown kódtömböket vagy szöveges bevezetőt.
+    """
+
+    try:
+        local_client = OpenAI(api_key=api_key)
+        res = local_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": "\n\n".join(raw_sports)}],
+            temperature=0.2
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        print(f"Smart Sports Error: {e}")
+        return fetch_top_news(["https://hvg.hu/rss/sport", "https://telex.hu/rss/sport"], 5)
+
+# --- ÁLTALÁNOS ROVAT HÍREK ---
+def fetch_top_news(feed_urls, limit=5):
+    items = []
+    seen_titles = set()
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
+    for url in feed_urls:
+        try:
+            resp = requests.get(url, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                parsed = feedparser.parse(resp.content)
+                for entry in parsed.entries:
+                    title = getattr(entry, 'title', '').strip()
+                    link = getattr(entry, 'link', '').strip()
+                    if title and title not in seen_titles and link:
+                        seen_titles.add(title)
+                        items.append(f"<li style='margin-bottom:6px;'><a href='{link}' style='text-decoration:none; color:#1a0dab; font-weight:bold;' target='_blank'>{title}</a></li>")
+                    if len(items) >= limit:
+                        break
+        except Exception:
+            continue
+        if len(items) >= limit:
+            break
+    return f"<ul style='padding-left:20px;'>{''.join(items)}</ul>" if items else "<p>Nincs elérhető hír.</p>"
+
+def build_newsletter():
+    portfolio_table = build_portfolio_table()
+    quant_analysis = get_quant_summary()
+    
+    belfold = fetch_top_news(["https://hvg.hu/rss/itthon", "https://telex.hu/rss/belfold"], 5)
+    kulfold = fetch_top_news(["https://hvg.hu/rss/vilag", "https://telex.hu/rss/kulfold"], 5)
+    tech = fetch_top_news(["https://hvg.hu/rss/tudomany", "https://telex.hu/rss/tech"], 5)
+    klima = get_smart_climate_news()
+    sport = get_smart_sports_news()
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial, sans-serif; color:#333; padding:20px;">
+        <h2>Balansz</h2>
+        {portfolio_table}
+        <br><hr><br>
+        <h3>📈 TOP 3 Tőzsdei & Gazdasági Elemzés (Alpha Focus)</h3>
+        {quant_analysis}
+        <br><hr><br>
+        <h3>🇭🇺 Belföld (Top 5)</h3>{belfold}
+        <h3>🌍 Külföld (Top 5)</h3>{kulfold}
+        <h3>💻 Tudomány & Tech (Top 5)</h3>{tech}
+        <h3>🌱 Klíma, Energia & Környezet (Top 5)</h3>{klima}
+        <h3>⚽ Sport (F1, Liverpool & Top Magyar)</h3>{sport}
+    </body>
+    </html>
+    """
+
+def send_email(html_content):
+    msg = MIMEMultipart('alternative')
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = RECEIVER_EMAIL
+    msg['Subject'] = "Napi Hírlevél & Balansz Portfólió"
+    msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print("E-mail sikeresen elküldve!")
+    except Exception as e:
+        print(f"Hiba küldéskor: {e}")
+
+if __name__ == "__main__":
+    content = build_newsletter()
+    send_email(content)
