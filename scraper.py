@@ -206,4 +206,4 @@ def build_portfolio_table():
                     else:
                         hist_btd = hist.loc[hist.index >= sub["buy_date"]]
                         sub_buy_p = hist_btd['Close'].iloc[0] if not hist_btd.empty else curr_price
-                        if used_symbol and used_symbol.endswith(".L") and sub
+                      if used_symbol and used_symbol.endswith(".L") and sub_buy_p > 1000 and item["currency"] in ["USD", "GBP"]:
