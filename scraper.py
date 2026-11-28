@@ -77,7 +77,7 @@ PORTFOLIO = [
     },
     # EGYEDI POZÍCIÓK IBKR AKTUÁLIS LISTA ALAPJÁN
     {"name": "TSMC (TSM)", "symbols": ["TSM"], "pos": 1.6, "currency": "USD", "buy_date": "2026-11-23", "buy_price_override": 366.46},
-    {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 0.71, "currency": "USD", "buy_date": "2026-09-24", "buy_price_override": 649.10},
+    {"name": "Meta Platforms (META)", "symbols": ["META"], "pos": 0.71, "currency": "USD", "buy_date": "2026-09-24", "buy_price_override": 750.57},
     {"name": "MercadoLibre (MELI)", "symbols": ["MELI"], "pos": 0.23, "currency": "USD", "buy_date": "2026-10-06", "buy_price_override": 1855.33},
     {"name": "Hermès International (RMS)", "symbols": ["RMS.PA"], "pos": 0.21, "currency": "EUR", "buy_date": "2026-09-21"},
     {"name": "Brookfield Corp (BN)", "symbols": ["BN", "BN.TO"], "pos": 12.4458, "currency": "USD", "buy_date": "2026-09-22"},
